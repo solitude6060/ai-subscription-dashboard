@@ -243,4 +243,93 @@ describe("OpenUsagePluginProvider isolation behavior", () => {
       lines: [{ type: "text", label: "AppData", value: join(process.env.HOME?.trim() || homedir(), ".openusage-webui") }],
     });
   });
+
+  test("reads the agy token from the Secret Service keyring when the local store misses", async () => {
+    const calls: string[][] = [];
+    const provider = new OpenUsagePluginProvider({
+      providerId: "antigravity",
+      name: "Antigravity",
+      pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-agy-keyring-")),
+      env: {},
+      secretServiceRunner: (args) => {
+        calls.push(args);
+        return { exitCode: 0, stdout: Buffer.from('{"token":{"access_token":"keyring-token"}}\n') };
+      },
+      scriptText: `
+        globalThis.__openusage_plugin = {
+          id: "agy-keyring",
+          probe(ctx) {
+            const raw = ctx.host.keychain.readGenericPassword("gemini", "antigravity");
+            return { lines: [ctx.line.text({ label: "Raw", value: raw })] };
+          },
+        };
+      `,
+    });
+
+    const records = await provider.refresh();
+
+    expect(records[0]?.raw).toMatchObject({
+      lines: [{ type: "text", label: "Raw", value: '{"token":{"access_token":"keyring-token"}}' }],
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.slice(-2)).toEqual(["gemini", "antigravity"]);
+  });
+
+  test("reports a missing keyring item as not found", async () => {
+    const provider = new OpenUsagePluginProvider({
+      providerId: "antigravity",
+      name: "Antigravity",
+      pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-agy-keyring-miss-")),
+      env: {},
+      secretServiceRunner: () => ({ exitCode: 3, stdout: Buffer.from("") }),
+      scriptText: `
+        globalThis.__openusage_plugin = {
+          id: "agy-keyring-miss",
+          probe(ctx) {
+            try {
+              ctx.host.keychain.readGenericPassword("gemini", "antigravity");
+              return { lines: [ctx.line.text({ label: "Result", value: "found" })] };
+            } catch (e) {
+              return { lines: [ctx.line.text({ label: "Result", value: String(e) })] };
+            }
+          },
+        };
+      `,
+    });
+
+    const records = await provider.refresh();
+    const line = (records[0]?.raw as { lines: Array<{ value: string }> }).lines[0];
+
+    expect(line?.value).toContain("not found");
+  });
+
+  test("never reads the Secret Service keyring for other keychain services", async () => {
+    const provider = new OpenUsagePluginProvider({
+      providerId: "claude-code",
+      name: "Claude",
+      pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-other-keyring-")),
+      env: {},
+      secretServiceRunner: () => {
+        throw new Error("Secret Service must not be read for this service");
+      },
+      scriptText: `
+        globalThis.__openusage_plugin = {
+          id: "other-keyring",
+          probe(ctx) {
+            try {
+              ctx.host.keychain.readGenericPassword("Claude Code-credentials", "user");
+              return { lines: [ctx.line.text({ label: "Result", value: "found" })] };
+            } catch (e) {
+              return { lines: [ctx.line.text({ label: "Result", value: String(e) })] };
+            }
+          },
+        };
+      `,
+    });
+
+    const records = await provider.refresh();
+    const line = (records[0]?.raw as { lines: Array<{ value: string }> }).lines[0];
+
+    expect(line?.value).toContain("not found");
+  });
 });
