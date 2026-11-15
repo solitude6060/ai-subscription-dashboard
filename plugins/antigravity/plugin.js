@@ -161,6 +161,13 @@
     )
   }
 
+  function pinnedHomeIsDefault(ctx) {
+    if (readEnvText(ctx, "OPENUSAGE_ANTIGRAVITY_CONFIG_DIR")) return false
+    var pinned = readEnvText(ctx, "OPENUSAGE_ANTIGRAVITY_CLI_HOME")
+    var home = readEnvText(ctx, "HOME")
+    return !!pinned && !!home && pinned.replace(/\/+$/, "") === home.replace(/\/+$/, "")
+  }
+
   function stateDbCandidates(ctx) {
     var configDir = readEnvText(ctx, "OPENUSAGE_ANTIGRAVITY_CONFIG_DIR")
     if (configDir) {
@@ -1008,7 +1015,8 @@
 
     if (!result) {
       // Multi-account homes must not fall back to the global keychain (cross-account bleed).
-      var agyToken = hasPinnedAntigravityHome(ctx) ? null : loadAgyKeychainToken(ctx)
+      // The keychain belongs to the default home's agy, so a home pinned to $HOME may read it.
+      var agyToken = hasPinnedAntigravityHome(ctx) && !pinnedHomeIsDefault(ctx) ? null : loadAgyKeychainToken(ctx)
       if (agyToken) {
         var agyResult = probeAgyCloudCode(ctx, agyToken)
         if (agyResult && !agyResult._authFailed) result = agyResult
