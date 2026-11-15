@@ -9,7 +9,7 @@ Antigravity is built on Codeium/Windsurf-derived infrastructure and uses the sam
 - **Vendor:** Google (internal codename "Jetski")
 - **Protocol:** Connect RPC v1 (JSON over HTTP) on local language server
 - **Service:** `exa.language_server_pb.LanguageServerService`
-- **Auth:** CSRF token from app/IDE process args; Google OAuth tokens from SQLite; `agy` token from macOS Keychain
+- **Auth:** CSRF token from app/IDE process args; Google OAuth tokens from SQLite; `agy` token from macOS Keychain or the Linux Secret Service keyring
 - **Quota:** fraction (0.0–1.0, where 1.0 = 100% remaining)
 - **Quota windows:** two shared pools (Gemini; Claude and GPT), each with a rolling 5-hour and a weekly window; eligible Pro accounts also have a separate Gemini 4 Argon weekly window
 - **Timestamps:** ISO 8601
@@ -274,6 +274,8 @@ Base URLs tried in order:
 
 `agy` stores its auth in the macOS Keychain under service `gemini`, account `antigravity`. OpenUsage reads that exact account only; it does not use legacy Gemini CLI files.
 
+On Linux, `agy` 1.5.9 stores the same entry in the Secret Service keyring (attributes `service=gemini`, `username=antigravity`) as plain JSON: `token.{access_token, token_type, refresh_token, expiry, expires_in}`, `auth_method`, `id_token_email`. The default home then has no `antigravity-oauth-token` file. The WebUI host reads that item with a read-only libsecret lookup (`python3 -I`, 5 second timeout) when its local keychain store has no `gemini` entry; other keychain services never reach the keyring. The plugin uses the stored access token as is, so the card stays current while `agy` runs and refreshes it hourly. If `agy` has not run for about an hour, or the keyring is still locked after a reboot, the card shows the login message.
+
 Local multi-home wrappers (for example `agy` / `agy2` via `HOME=~/.agy-homes/<profile>`) keep a private `.gemini` tree. The plugin also reads:
 
 `~/.agy-homes/<profile>/.gemini/antigravity-cli/antigravity-oauth-token`
@@ -286,7 +288,7 @@ Probes add an **Account** badge when the oauth file has an OIDC `id_token`; the 
 
 When enabled Antigravity accounts exist and none of them is the default CLI home, Settings shows **Default Antigravity Account Not Tracked** at the top of Provider Accounts, whichever provider is selected. The button adds that home through the existing account API with the label `Antigravity · Local CLI` and selects Antigravity. The manual placeholder for Antigravity is the same label and `~`.
 
-When WebUI Provider Accounts pin a home, that path is injected as `OPENUSAGE_ANTIGRAVITY_CLI_HOME`. IDE config roots use `OPENUSAGE_ANTIGRAVITY_CONFIG_DIR` and only that root’s `state.vscdb`. A home is treated as an IDE config root when it looks like one: it contains `User/globalStorage`, ends with `/Antigravity` or `/Antigravity IDE`, or sits under `Library/Application Support/Antigravity`. Every other path counts as a CLI home, so a manual CLI home that doesn't have an oauth token file yet still gets picked up. Pinned homes skip local language-server discovery and the global keychain so accounts stay isolated.
+When WebUI Provider Accounts pin a home, that path is injected as `OPENUSAGE_ANTIGRAVITY_CLI_HOME`. IDE config roots use `OPENUSAGE_ANTIGRAVITY_CONFIG_DIR` and only that root’s `state.vscdb`. A home is treated as an IDE config root when it looks like one: it contains `User/globalStorage`, ends with `/Antigravity` or `/Antigravity IDE`, or sits under `Library/Application Support/Antigravity`. Every other path counts as a CLI home, so a manual CLI home that doesn't have an oauth token file yet still gets picked up. Pinned homes skip local language-server discovery and the global keychain so accounts stay isolated. One exception: a home pinned to `$HOME` may read the `agy` keychain entry, because that entry belongs to the default home's `agy`; overlay profiles run without D-Bus and use their own token files. Language-server discovery stays skipped there too, because the Antigravity IDE 2.0.11 server answers `RetrieveUserQuotaSummary` with 404 and its per-model reply has only a Claude line.
 
 For `agy`, OpenUsage calls:
 
@@ -325,7 +327,7 @@ The Cloud Code model set is a superset of the LS model set. The LS returns only 
 3. Read CLI oauth file when `OPENUSAGE_ANTIGRAVITY_CLI_HOME` is set; otherwise read SQLite token candidates from Antigravity state DB paths (or only `OPENUSAGE_ANTIGRAVITY_CONFIG_DIR` when set).
 4. Try unexpired SQLite/CLI/cached access tokens: `loadCodeAssist` (plan), then the quota summary on both hosts, then `fetchAvailableModels` only when no host returned a summary. Expired CLI tokens are skipped and refreshed instead of tried.
 5. Refresh SQLite/CLI refresh tokens only after auth failure or when no access token exists.
-6. Read `agy` keychain token from service `gemini`, account `antigravity` (skipped when a multi-account home env is set), then call `loadCodeAssist`, the quota summary, and `retrieveUserQuota` as a fallback.
+6. Read `agy` keychain token from service `gemini`, account `antigravity` (skipped when a multi-account home env is set, unless the pinned CLI home is `$HOME`), then call `loadCodeAssist`, the quota summary, and `retrieveUserQuota` as a fallback.
 7. If all strategies fail: error "Start Antigravity or run `agy` and try again."
 
 ### Multi-account homes (WebUI)
