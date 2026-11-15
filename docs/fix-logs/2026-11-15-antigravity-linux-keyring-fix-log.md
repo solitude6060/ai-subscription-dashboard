@@ -49,4 +49,4 @@ Alternatives measured and rejected (plan, Measurements table): unpinning the def
 - Keychain path uses the stored access token without refresh; it depends on a running `agy`.
 - A locked keyring after reboot makes the lookup fail until login.
 - No Account badge on the keyring path.
-- `openusage-plugin.ts` is 589 lines, above the ~500 line guideline (560 before this change).
+- `openusage-plugin.ts` is 618 lines, above the ~500 line guideline (560 before this change).
