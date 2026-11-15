@@ -50,3 +50,7 @@ Alternatives measured and rejected (plan, Measurements table): unpinning the def
 - A locked keyring after reboot makes the lookup fail until login.
 - No Account badge on the keyring path.
 - `openusage-plugin.ts` is 618 lines, above the ~500 line guideline (560 before this change).
+
+## Review Round 1
+
+Review record: `docs/reviews/2026-11-15-antigravity-linux-keyring-review.md` (reviewed head `23c31e2a`). Grok Build xhigh, Claude Code Opus 5.5 high (substitute for AGY after two authentication failures) and Codex `gpt-6.1-sol` high all returned APPROVE. Six LOW findings (C1, O1–O5) are deferred to a follow-up recorded in `tracker.md`. The locked-keyring statement in `docs/providers/antigravity.md` is not verified by a live run (O4).
