@@ -28,3 +28,7 @@ Plan: `docs/plans/2026-11-15-antigravity-keyring-followups.md`. Branch `fix/anti
 - `bun run test:webui`: 633 passed, 1 failed (`CcusageProvider > default command runner cleans up child processes on timeout`, known flake). No `Secret Service lookup` line in the test log.
 - `bun run build:webui`: passed.
 - `openusage-plugin.ts` is 630 lines (618 before).
+
+## Review Round 1
+
+Review record: `docs/reviews/2026-11-15-antigravity-keyring-followups-review.md` (reviewed head `2ffff42d`). Grok Build xhigh, AGY Gemini 4 Hydrogen high (SSH variables unset) and Codex `gpt-6.1-sol` high returned APPROVE with no findings.
