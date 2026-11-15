@@ -1286,6 +1286,57 @@ describe("antigravity plugin", () => {
     expect(result.lines.map((l) => l.label)).toEqual(["Session", "Claude"])
   })
 
+  it("reads the agy keychain for a home pinned to $HOME without a token file", async () => {
+    const ctx = makeCtx()
+    setupSqliteMock(ctx, null)
+    ctx.host.env.get.mockImplementation((name) => {
+      if (name === "OPENUSAGE_ANTIGRAVITY_CLI_HOME") return "/home/agy-user/"
+      if (name === "HOME") return "/home/agy-user"
+      return null
+    })
+    ctx.host.keychain.readGenericPassword.mockImplementation((service, account) => {
+      if (service === "gemini" && account === "antigravity") {
+        // Linux Secret Service shape: plain JSON, no go-keyring prefix.
+        return JSON.stringify({
+          token: {
+            access_token: "agy-linux-keyring-token",
+            token_type: "Bearer",
+            refresh_token: "1//keyring",
+            expiry: "2099-01-01T00:00:00+08:00",
+            expires_in: 3599,
+          },
+          auth_method: "oauth",
+          id_token_email: "agy@example.com",
+        })
+      }
+      throw new Error("unexpected keychain lookup")
+    })
+
+    const called = []
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      called.push(opts.headers.Authorization)
+      if (url.includes("loadCodeAssist")) {
+        return { status: 200, bodyText: JSON.stringify(makeAgyLoadResponse()) }
+      }
+      if (url.includes("retrieveUserQuota")) {
+        return { status: 200, bodyText: JSON.stringify(makeAgyQuotaResponse()) }
+      }
+      return { status: 500, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(ctx.host.ls.discover).not.toHaveBeenCalled()
+    expect(ctx.host.keychain.readGenericPassword).toHaveBeenCalledWith("gemini", "antigravity")
+    expect(called.length).toBeGreaterThan(0)
+    expect(called.every((auth) => auth === "Bearer agy-linux-keyring-token")).toBe(true)
+    expect(result.plan).toBe("Google AI Pro")
+    expect(result.lines.map((l) => l.label)).toEqual(["Session", "Claude"])
+    expect(JSON.stringify(result.lines)).not.toContain("1//keyring")
+  })
+
   it("tries agy Cloud Code even when the keychain token matches a SQLite token", async () => {
     const ctx = makeCtx()
     const futureExpiry = Math.floor(Date.now() / 1000) + 3600

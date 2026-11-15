@@ -328,6 +328,7 @@ describe("OpenUsagePluginProvider original bundled plugin fixtures", () => {
           env: {},
           request: () => ({ status: 500, headers: {}, bodyText: "{}" }),
           ccusageQuery: () => ({ status: "no_runner", data: null }),
+          secretServiceRunner: () => ({ exitCode: 3, stdout: "" }),
         });
 
         await expect(provider.refresh()).rejects.toThrow(expectedErrorFragment);

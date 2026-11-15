@@ -78,6 +78,7 @@ export interface OpenUsagePluginProviderOptions {
   ccusageQuery?: (opts: PluginCcusageQueryOptions) => PluginCcusageQueryResult;
   ccusageRunner?: PluginCcusageRunner;
   gitHubTokenRunner?: PluginGitHubTokenRunner;
+  secretServiceRunner?: PluginSecretServiceRunner;
   lsDiscover?: (opts: LanguageServerDiscoveryOptions) => LanguageServerDiscovery | null;
   now?: () => string;
   pluginDataDir?: string;
@@ -101,6 +102,24 @@ type PluginGitHubTokenRunner = (
   opts: { env: Record<string, string | undefined> },
 ) => { exitCode: number; stdout: string | Uint8Array };
 
+type PluginSecretServiceRunner = (
+  args: string[],
+  opts: { env: Record<string, string | undefined> },
+) => { exitCode: number | null; stdout: string | Uint8Array; stderr?: string | Uint8Array };
+
+const AGY_KEYRING_SERVICE = "gemini";
+const SECRET_SERVICE_NOT_FOUND_EXIT = 3;
+// Read-only libsecret lookup; prints the secret on stdout only, exits 3 when no item matches.
+const SECRET_SERVICE_LOOKUP_SCRIPT = [
+  "import sys, gi",
+  "gi.require_version('Secret', '1')",
+  "from gi.repository import Secret",
+  "schema = Secret.Schema.new('org.freedesktop.Secret.Generic', Secret.SchemaFlags.DONT_MATCH_NAME,",
+  "    {'service': Secret.SchemaAttributeType.STRING, 'username': Secret.SchemaAttributeType.STRING})",
+  "value = Secret.password_lookup_sync(schema, {'service': sys.argv[1], 'username': sys.argv[2]}, None)",
+  "sys.exit(3) if value is None else sys.stdout.write(value)",
+].join("\n");
+
 export class OpenUsagePluginProvider implements UsageProvider {
   readonly id: ProviderId;
   readonly name: string;
@@ -116,6 +135,7 @@ export class OpenUsagePluginProvider implements UsageProvider {
   private readonly ccusageQueryImpl: (opts: PluginCcusageQueryOptions) => PluginCcusageQueryResult;
   private readonly ccusageBlocksImpl?: (opts: PluginCcusageQueryOptions) => ReturnType<typeof runPluginCcusageBlocks>;
   private readonly gitHubTokenRunner?: PluginGitHubTokenRunner;
+  private readonly secretServiceRunner?: PluginSecretServiceRunner;
   private readonly lsDiscover: (opts: LanguageServerDiscoveryOptions) => LanguageServerDiscovery | null;
   private readonly now: () => string;
   private readonly pluginDataDir: string;
@@ -143,6 +163,7 @@ export class OpenUsagePluginProvider implements UsageProvider {
       ? undefined
       : (opts) => runPluginCcusageBlocks(opts, this.homeDir, options.ccusageRunner, this.env);
     this.gitHubTokenRunner = options.gitHubTokenRunner;
+    this.secretServiceRunner = options.secretServiceRunner;
     this.lsDiscover = options.lsDiscover ?? discoverLanguageServer;
     this.recordCcusageTokens = options.recordCcusageTokens ?? true;
     this.piSessionTokensEnabled = options.recordPiSessionTokens ?? true;
@@ -152,6 +173,7 @@ export class OpenUsagePluginProvider implements UsageProvider {
       && options.ccusageQuery === undefined
       && options.ccusageRunner === undefined
       && options.gitHubTokenRunner === undefined
+      && options.secretServiceRunner === undefined
       && options.lsDiscover === undefined
       && options.now === undefined;
     this.codexEventScan = options.codexEventScan ?? null;
@@ -388,6 +410,13 @@ export class OpenUsagePluginProvider implements UsageProvider {
               if (gitHubToken !== null) return gitHubToken;
               throw keychainItemNotFound(service);
             }
+            if (service === AGY_KEYRING_SERVICE) {
+              const localToken = this.readLocalKeychainPassword(service, account);
+              if (localToken !== null) return localToken;
+              const keyringToken = this.readSecretServicePassword(service, account);
+              if (keyringToken !== null) return keyringToken;
+              throw keychainItemNotFound(service);
+            }
             return this.readRequiredLocalKeychainPassword(service, account);
           },
           readGenericPasswordForCurrentUser: (service: string) =>
@@ -488,6 +517,35 @@ export class OpenUsagePluginProvider implements UsageProvider {
       const token = Buffer.from(proc.stdout).toString("utf8").trim();
       return token || null;
     } catch {
+      return null;
+    }
+  }
+
+  /** Linux `agy` keeps its token in the Secret Service keyring (go-keyring attributes service/username). */
+  private readSecretServicePassword(service: string, account?: string): string | null {
+    if (!account || (!this.secretServiceRunner && process.platform !== "linux")) return null;
+    const args = ["python3", "-I", "-c", SECRET_SERVICE_LOOKUP_SCRIPT, service, account];
+    try {
+      const proc = this.secretServiceRunner
+        ? this.secretServiceRunner(args, { env: this.env })
+        : Bun.spawnSync(args, {
+            env: this.env,
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: 5_000,
+          });
+      if (proc.exitCode === 0) {
+        const value = Buffer.from(proc.stdout).toString("utf8").trim();
+        return value || null;
+      }
+      if (proc.exitCode !== SECRET_SERVICE_NOT_FOUND_EXIT) {
+        const stderr = "stderr" in proc && proc.stderr ? Buffer.from(proc.stderr).toString("utf8").trim() : "";
+        console.error(`Secret Service lookup for ${service} failed (exit ${proc.exitCode}): ${stderr.slice(0, 300)}`);
+      }
+      return null;
+    } catch (error) {
+      console.error(`Secret Service lookup for ${service} failed: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
