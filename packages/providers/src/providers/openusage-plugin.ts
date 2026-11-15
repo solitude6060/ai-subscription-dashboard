@@ -107,17 +107,25 @@ type PluginSecretServiceRunner = (
   opts: { env: Record<string, string | undefined> },
 ) => { exitCode: number | null; stdout: string | Uint8Array; stderr?: string | Uint8Array };
 
+const AGY_KEYRING_PLUGIN_ID = "antigravity";
 const AGY_KEYRING_SERVICE = "gemini";
+const AGY_KEYRING_ACCOUNT = "antigravity";
 const SECRET_SERVICE_NOT_FOUND_EXIT = 3;
-// Read-only libsecret lookup; prints the secret on stdout only, exits 3 when no item matches.
+// Read-only libsecret search without SearchFlags.UNLOCK, so a locked keyring never raises an
+// unlock prompt. Prints the secret on stdout only; exits 3 when no item matches, 4 when locked.
 const SECRET_SERVICE_LOOKUP_SCRIPT = [
   "import sys, gi",
   "gi.require_version('Secret', '1')",
   "from gi.repository import Secret",
   "schema = Secret.Schema.new('org.freedesktop.Secret.Generic', Secret.SchemaFlags.DONT_MATCH_NAME,",
   "    {'service': Secret.SchemaAttributeType.STRING, 'username': Secret.SchemaAttributeType.STRING})",
-  "value = Secret.password_lookup_sync(schema, {'service': sys.argv[1], 'username': sys.argv[2]}, None)",
-  "sys.exit(3) if value is None else sys.stdout.write(value)",
+  "service = Secret.Service.get_sync(Secret.ServiceFlags.NONE, None)",
+  "items = service.search_sync(schema, {'service': sys.argv[1], 'username': sys.argv[2]}, Secret.SearchFlags.LOAD_SECRETS, None)",
+  "values = [i.get_secret() for i in items if not i.get_locked()]",
+  "values = [v for v in values if v is not None]",
+  "if values: sys.stdout.write(values[0].get_text()); sys.exit(0)",
+  "if items: sys.stderr.write('keyring item is locked'); sys.exit(4)",
+  "sys.exit(3)",
 ].join("\n");
 
 export class OpenUsagePluginProvider implements UsageProvider {
@@ -410,7 +418,11 @@ export class OpenUsagePluginProvider implements UsageProvider {
               if (gitHubToken !== null) return gitHubToken;
               throw keychainItemNotFound(service);
             }
-            if (service === AGY_KEYRING_SERVICE) {
+            if (
+              service === AGY_KEYRING_SERVICE
+              && account === AGY_KEYRING_ACCOUNT
+              && this.pluginId === AGY_KEYRING_PLUGIN_ID
+            ) {
               const localToken = this.readLocalKeychainPassword(service, account);
               if (localToken !== null) return localToken;
               const keyringToken = this.readSecretServicePassword(service, account);

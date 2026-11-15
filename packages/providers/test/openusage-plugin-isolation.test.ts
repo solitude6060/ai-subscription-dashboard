@@ -249,6 +249,7 @@ describe("OpenUsagePluginProvider isolation behavior", () => {
     const provider = new OpenUsagePluginProvider({
       providerId: "antigravity",
       name: "Antigravity",
+      pluginId: "antigravity",
       pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-agy-keyring-")),
       env: {},
       secretServiceRunner: (args) => {
@@ -279,6 +280,7 @@ describe("OpenUsagePluginProvider isolation behavior", () => {
     const provider = new OpenUsagePluginProvider({
       providerId: "antigravity",
       name: "Antigravity",
+      pluginId: "antigravity",
       pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-agy-keyring-miss-")),
       env: {},
       secretServiceRunner: () => ({ exitCode: 3, stdout: Buffer.from("") }),
@@ -303,22 +305,29 @@ describe("OpenUsagePluginProvider isolation behavior", () => {
     expect(line?.value).toContain("not found");
   });
 
-  test("never reads the Secret Service keyring for other keychain services", async () => {
+  test.each([
+    ["another keychain service", "claude-code", "claude", "Claude Code-credentials", "user"],
+    ["another plugin asking for gemini", "gemini-cli", "gemini-cli", "gemini", "antigravity"],
+    ["another gemini account", "antigravity", "antigravity", "gemini", "other-account"],
+  ] as const)("never reads the Secret Service keyring for %s", async (_case, providerId, pluginId, service, account) => {
+    let runnerCalls = 0;
     const provider = new OpenUsagePluginProvider({
-      providerId: "claude-code",
-      name: "Claude",
-      pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-other-keyring-")),
+      providerId,
+      name: "Keyring Scope",
+      pluginId,
+      pluginDataDir: mkdtempSync(join(tmpdir(), "openusage-keyring-scope-")),
       env: {},
       secretServiceRunner: () => {
-        throw new Error("Secret Service must not be read for this service");
+        runnerCalls += 1;
+        return { exitCode: 0, stdout: Buffer.from("must-not-be-returned") };
       },
       scriptText: `
         globalThis.__openusage_plugin = {
-          id: "other-keyring",
+          id: "keyring-scope",
           probe(ctx) {
             try {
-              ctx.host.keychain.readGenericPassword("Claude Code-credentials", "user");
-              return { lines: [ctx.line.text({ label: "Result", value: "found" })] };
+              const value = ctx.host.keychain.readGenericPassword(${JSON.stringify(service)}, ${JSON.stringify(account)});
+              return { lines: [ctx.line.text({ label: "Result", value: "found:" + value })] };
             } catch (e) {
               return { lines: [ctx.line.text({ label: "Result", value: String(e) })] };
             }
@@ -330,6 +339,7 @@ describe("OpenUsagePluginProvider isolation behavior", () => {
     const records = await provider.refresh();
     const line = (records[0]?.raw as { lines: Array<{ value: string }> }).lines[0];
 
+    expect(runnerCalls).toBe(0);
     expect(line?.value).toContain("not found");
   });
 });

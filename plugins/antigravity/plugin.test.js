@@ -1333,8 +1333,32 @@ describe("antigravity plugin", () => {
     expect(called.length).toBeGreaterThan(0)
     expect(called.every((auth) => auth === "Bearer agy-linux-keyring-token")).toBe(true)
     expect(result.plan).toBe("Google AI Pro")
-    expect(result.lines.map((l) => l.label)).toEqual(["Session", "Claude"])
+    expect(result.lines[0]).toMatchObject({ type: "badge", label: "Account", text: "agy@example.com" })
+    expect(result.lines.slice(1).map((l) => l.label)).toEqual(["Session", "Claude"])
     expect(JSON.stringify(result.lines)).not.toContain("1//keyring")
+  })
+
+  it.each([
+    ["an overlay home", { OPENUSAGE_ANTIGRAVITY_CLI_HOME: "/home/x/.agy-homes/agy1", HOME: "/home/x" }],
+    ["a home that only shares a prefix with $HOME", { OPENUSAGE_ANTIGRAVITY_CLI_HOME: "/home/xy", HOME: "/home/x" }],
+    ["an IDE config dir with CLI home set to $HOME", {
+      OPENUSAGE_ANTIGRAVITY_CONFIG_DIR: "/home/x/.config/Antigravity",
+      OPENUSAGE_ANTIGRAVITY_CLI_HOME: "/home/x",
+      HOME: "/home/x",
+    }],
+  ])("never reads the agy keychain for %s", async (_name, env) => {
+    const ctx = makeCtx()
+    setupSqliteMock(ctx, null)
+    ctx.host.env.get.mockImplementation((name) => env[name] ?? null)
+    ctx.host.keychain.readGenericPassword.mockImplementation(() => {
+      throw new Error("keychain should not be read for this home")
+    })
+    ctx.host.http.request.mockReturnValue({ status: 500, bodyText: "" })
+
+    const plugin = await loadPlugin()
+
+    expect(() => plugin.probe(ctx)).toThrow(LOGIN_MESSAGE)
+    expect(ctx.host.keychain.readGenericPassword).not.toHaveBeenCalled()
   })
 
   it("tries agy Cloud Code even when the keychain token matches a SQLite token", async () => {

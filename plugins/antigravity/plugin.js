@@ -370,13 +370,20 @@
     return text
   }
 
+  function agyKeychainEmail(ctx, raw) {
+    var parsed = ctx.util.tryParseJson(unwrapAgyKeychainText(ctx, raw) || "")
+    var email = parsed && typeof parsed.id_token_email === "string" ? parsed.id_token_email.trim() : ""
+    return email || null
+  }
+
   function loadAgyKeychainToken(ctx) {
     if (!ctx.host.keychain || typeof ctx.host.keychain.readGenericPassword !== "function") {
       return null
     }
     try {
       var raw = ctx.host.keychain.readGenericPassword(AGY_KEYCHAIN_SERVICE, AGY_KEYCHAIN_ACCOUNT)
-      return extractAgyAccessToken(ctx, raw)
+      var token = extractAgyAccessToken(ctx, raw)
+      return token ? { token: token, email: agyKeychainEmail(ctx, raw) } : null
     } catch (e) {
       ctx.host.log.info("agy keychain read failed: " + String(e))
       return null
@@ -945,9 +952,9 @@
     }
   }
 
-  function attachAccountBadge(ctx, result) {
+  function attachAccountBadge(ctx, result, fallbackEmail) {
     if (!result || !Array.isArray(result.lines)) return result
-    var email = resolvePinnedCliAccountEmail(ctx)
+    var email = resolvePinnedCliAccountEmail(ctx) || fallbackEmail || null
     if (!email) return result
     var lines = result.lines.slice()
     lines.unshift(ctx.line.badge({ label: "Account", text: email }))
@@ -980,6 +987,7 @@
     if (cached && tokens.indexOf(cached) === -1) tokens.push(cached)
 
     var result = null
+    var keychainEmail = null
     var sawAuthFailure = false
     for (var i = 0; i < tokens.length; i++) {
       var nextResult = probeCloudCodeToken(ctx, tokens[i])
@@ -1016,14 +1024,17 @@
     if (!result) {
       // Multi-account homes must not fall back to the global keychain (cross-account bleed).
       // The keychain belongs to the default home's agy, so a home pinned to $HOME may read it.
-      var agyToken = hasPinnedAntigravityHome(ctx) && !pinnedHomeIsDefault(ctx) ? null : loadAgyKeychainToken(ctx)
-      if (agyToken) {
-        var agyResult = probeAgyCloudCode(ctx, agyToken)
-        if (agyResult && !agyResult._authFailed) result = agyResult
+      var agyKeychain = hasPinnedAntigravityHome(ctx) && !pinnedHomeIsDefault(ctx) ? null : loadAgyKeychainToken(ctx)
+      if (agyKeychain) {
+        var agyResult = probeAgyCloudCode(ctx, agyKeychain.token)
+        if (agyResult && !agyResult._authFailed) {
+          result = agyResult
+          keychainEmail = agyKeychain.email
+        }
       }
     }
 
-    if (result) return attachAccountBadge(ctx, result)
+    if (result) return attachAccountBadge(ctx, result, keychainEmail)
 
     throw LOGIN_MESSAGE
   }
