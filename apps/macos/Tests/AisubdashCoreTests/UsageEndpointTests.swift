@@ -28,4 +28,31 @@ final class UsageEndpointTests: XCTestCase {
             XCTAssertNil(UsageEndpoint(tailscale: url), url)
         }
     }
+
+    func testTrimsWhitespaceNormalizesTrailingRootSlashAndCase() {
+        let ip = UsageEndpoint(tailscale: "  http://100.64.10.20:6736/ \n")
+        XCTAssertEqual(ip?.origin.absoluteString, "http://100.64.10.20:6736")
+        XCTAssertEqual(ip?.isLocal, false)
+
+        let host = UsageEndpoint(tailscale: "\tHTTPS://Server.My-Tailnet.TS.NET:8443/\t")
+        XCTAssertEqual(host?.origin.absoluteString, "https://server.my-tailnet.ts.net:8443")
+        XCTAssertEqual(host?.isLocal, false)
+    }
+
+    func testRejectsMalformedPortsNonCanonicalIPv4AndShortTailnetHost() {
+        for url in [
+            "http://100.64.0.1:",
+            "http://100.64.0.1:abc",
+            "http://100.64.0.1:06736",
+            "https://server.my-tailnet.ts.net:-1",
+            "http://100.064.0.1:6736",
+            "http://100.64.0.01:6736",
+            "http://1681915905:6736",
+            "http://100.64.0.1:6736//",
+            "https://ts.net",
+            "https://my-tailnet.ts.net",
+        ] {
+            XCTAssertNil(UsageEndpoint(tailscale: url), url)
+        }
+    }
 }
