@@ -29,7 +29,8 @@ A Tailscale URL contains only a scheme, address and optional port. Direct HTTP
 supports Tailscale's IPv4 range. Connect through your trusted tailnet and use its
 access rules to limit who can reach your Web server. The server's configured Host
 allowlist must also accept the address used by the request. The app uses the system's
-TLS verification for HTTPS. If macOS asks for Local Network access, enable it for
+TLS verification for HTTPS and connects to the configured usage origin directly. If
+macOS asks for Local Network access, enable it for
 aisubdash in System Settings → Privacy & Security → Local Network.
 [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve)
 

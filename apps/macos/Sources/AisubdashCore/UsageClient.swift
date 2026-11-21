@@ -20,26 +20,39 @@ private final class RedirectBlockingDelegate: NSObject, URLSessionTaskDelegate {
 }
 
 final class URLSessionUsageTransport: UsageTransport, @unchecked Sendable {
-    private let session: URLSession
+    private let readSession = makeSession(timeout: 12)
+    private let refreshSession = makeSession(timeout: 120)
 
-    init() {
+    private static func makeSession(timeout: TimeInterval) -> URLSession {
+        URLSession(
+            configuration: makeConfiguration(timeout: timeout),
+            delegate: RedirectBlockingDelegate(),
+            delegateQueue: nil
+        )
+    }
+
+    static func makeConfiguration(timeout: TimeInterval) -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCredentialStorage = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 12
-        configuration.timeoutIntervalForResource = 120
+        configuration.connectionProxyDictionary = [
+            "HTTPEnable": 0,
+            "HTTPSEnable": 0,
+            "SOCKSEnable": 0,
+            "ProxyAutoConfigEnable": 0,
+            "ProxyAutoDiscoveryEnable": 0,
+        ]
+        configuration.timeoutIntervalForRequest = timeout
+        configuration.timeoutIntervalForResource = timeout
 
-        self.session = URLSession(
-            configuration: configuration,
-            delegate: RedirectBlockingDelegate(),
-            delegateQueue: nil
-        )
+        return configuration
     }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let session = request.httpMethod == "POST" ? refreshSession : readSession
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else {
             throw UsageClientError.invalidResponse
@@ -105,6 +118,9 @@ public struct UsageClient: Sendable {
         } catch let error as UsageClientError {
             throw error
         } catch {
+            if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled {
+                throw CancellationError()
+            }
             throw UsageClientError.networkError
         }
 

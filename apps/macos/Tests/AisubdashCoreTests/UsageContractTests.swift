@@ -6,6 +6,18 @@ import XCTest
 @testable import AisubdashCore
 
 final class UsageContractTests: XCTestCase {
+    func testReadAndRefreshUseTheirOwnBoundedSessionTimeouts() {
+        for timeout: TimeInterval in [12, 120] {
+            let session = URLSessionUsageTransport.makeConfiguration(timeout: timeout)
+            XCTAssertEqual(session.timeoutIntervalForRequest, timeout)
+            XCTAssertEqual(session.timeoutIntervalForResource, timeout)
+            let settings = session.connectionProxyDictionary ?? [:]
+            for key in ["HTTPEnable", "HTTPSEnable", "SOCKSEnable", "ProxyAutoConfigEnable", "ProxyAutoDiscoveryEnable"] {
+                XCTAssertEqual(settings[key] as? Int, 0, key)
+            }
+        }
+    }
+
     func testDecodesEnabledProvidersJoinsExactIDsAndPreservesZeroAndDates() throws {
         let providersJSON = Data("""
         [

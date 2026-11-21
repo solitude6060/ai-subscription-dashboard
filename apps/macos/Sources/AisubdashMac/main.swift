@@ -1,8 +1,8 @@
 import Foundation
 
-let probeArgs = Array(CommandLine.arguments.dropFirst())
-if let exitCode = await ProbeRunner.runIfRequested(arguments: probeArgs) {
-    exit(exitCode)
+if let probe = ProbeRunner(arguments: Array(CommandLine.arguments.dropFirst())) {
+    Task { exit(await probe.run()) }
+    dispatchMain()
 }
 
 #if os(macOS)

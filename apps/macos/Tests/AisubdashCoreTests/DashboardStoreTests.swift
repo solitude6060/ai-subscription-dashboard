@@ -66,6 +66,38 @@ final class DashboardStoreTests: XCTestCase {
         XCTAssertEqual(store.pinnedQuotaID, "codex:work::5h")
     }
 
+    func testPinIsNotMissingBeforeItsSourceLoads() {
+        let preferences = InMemoryDashboardPreferences(
+            pinsByOrigin: [UsageEndpoint.local.origin.absoluteString: "codex:work::5h"]
+        )
+        let store = DashboardStore(preferences: preferences)
+        XCTAssertEqual(store.pinnedQuotaState(), .unavailable)
+    }
+
+    func testCancelledReadDoesNotMarkTheCachedDashboardStale() async {
+        let initial = Self.makeDashboard(accountID: "local:1", quotaLabel: "5h", used: 0, limit: 100)
+        let gate = AsyncGate<UsageDashboard>()
+        let calls = LockedBox(0)
+        let store = DashboardStore(
+            preferences: InMemoryDashboardPreferences(),
+            loadDashboard: { _ in
+                if calls.withLock({ $0 += 1; return $0 }) == 1 { return initial }
+                return try await gate.wait()
+            }
+        )
+
+        await store.reload()
+        let read = Task { await store.reload() }
+        await gate.waitUntilSuspended()
+        read.cancel()
+        await gate.fail(throwing: CancellationError())
+        await read.value
+
+        XCTAssertEqual(store.dashboard, initial)
+        XCTAssertEqual(store.status, .idle)
+        XCTAssertFalse(store.isUsingCachedFallback)
+    }
+
     func testDelayedLocalToRemoteToLocalDiscardsStaleLocalGeneration() async {
         let staleLocalDashboard = Self.makeDashboard(accountID: "local:old", quotaLabel: "5h", used: 10, limit: 100)
         let freshLocalDashboard = Self.makeDashboard(accountID: "local:new", quotaLabel: "5h", used: 75, limit: 100)
@@ -348,6 +380,11 @@ private actor AsyncGate<Value: Sendable> {
 
     func resume(returning value: Value) {
         pendingResult?.resume(returning: value)
+        pendingResult = nil
+    }
+
+    func fail(throwing error: Error) {
+        pendingResult?.resume(throwing: error)
         pendingResult = nil
     }
 }

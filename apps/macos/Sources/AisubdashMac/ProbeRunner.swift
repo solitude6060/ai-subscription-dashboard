@@ -1,30 +1,23 @@
 import Foundation
 import AisubdashCore
 
-enum ProbeRunner {
-    static func runIfRequested(arguments: [String]) async -> Int32? {
-        guard let first = arguments.first else {
+struct ProbeRunner {
+    private let endpoint: UsageEndpoint?
+
+    init?(arguments: [String]) {
+        switch arguments.first {
+        case "--probe-local":
+            endpoint = arguments.count == 1 ? .local : nil
+        case "--probe-tailscale":
+            endpoint = arguments.count == 2 ? UsageEndpoint(tailscale: arguments[1]) : nil
+        default:
             return nil
         }
+    }
 
-        let endpoint: UsageEndpoint
-        switch first {
-        case "--probe-local":
-            guard arguments.count == 1 else {
-                fputs("Invalid probe arguments.\n", stderr)
-                return 2
-            }
-            endpoint = .local
-
-        case "--probe-tailscale":
-            guard arguments.count == 2, let parsed = UsageEndpoint(tailscale: arguments[1]) else {
-                fputs("Invalid Tailscale endpoint URL.\n", stderr)
-                return 2
-            }
-            endpoint = parsed
-
-        default:
-            fputs("Unsupported command-line arguments.\n", stderr)
+    func run() async -> Int32 {
+        guard let endpoint else {
+            fputs("Invalid probe arguments.\n", stderr)
             return 2
         }
 

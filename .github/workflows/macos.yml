@@ -7,6 +7,7 @@ on:
       - "apps/macos/**"
       - "apps/server/**"
       - "packages/core/**"
+      - "packages/providers/**"
       - "packages/storage/**"
       - ".github/workflows/macos.yml"
 
@@ -24,7 +25,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.5
       - name: Install locked workspace packages
         run: bun install --frozen-lockfile
       - name: Run Swift tests and build the application
@@ -42,11 +43,23 @@ jobs:
           plutil -lint "$plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$plist")" = true
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist")" = 14.0
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$plist")" = false
+          for exception in 127.0.0.1 100.64.0.0/10; do
+            test "$(/usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity:NSExceptionDomains:$exception:NSExceptionAllowsInsecureHTTPLoads" "$plist")" = true
+          done
           codesign --verify --strict "$app"
-          lipo -archs "$binary"
+          test "$(lipo -archs "$binary")" = "$(uname -m)"
 
           sudo ifconfig lo0 alias 100.64.0.2 255.255.255.255
           server_pid=
+          gui_pid=
+          stop_gui() {
+            if [[ -n "$gui_pid" ]]; then
+              kill "$gui_pid" 2>/dev/null || true
+              wait "$gui_pid" 2>/dev/null || true
+              gui_pid=
+            fi
+          }
           stop_server() {
             if [[ -n "$server_pid" ]]; then
               kill "$server_pid" 2>/dev/null || true
@@ -55,6 +68,7 @@ jobs:
             fi
           }
           cleanup() {
+            stop_gui
             stop_server
             sudo ifconfig lo0 -alias 100.64.0.2
           }
@@ -87,5 +101,13 @@ jobs:
             fi
             printf '%s %s\n' "$source" "$result"
             test "$result" = 'providers=1 quotas=1'
+            if [[ "$source" = local ]]; then
+              "$binary" -NSDocumentRevisionsDebugMode NO > "$GITHUB_WORKSPACE/.native-ci/gui.log" 2>&1 &
+              gui_pid=$!
+              sleep 4
+              kill -0 "$gui_pid" || { cat "$GITHUB_WORKSPACE/.native-ci/gui.log"; exit 1; }
+              echo "GUI process started with Cocoa launch arguments"
+              stop_gui
+            fi
             stop_server
           done

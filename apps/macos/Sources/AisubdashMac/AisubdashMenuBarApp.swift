@@ -60,6 +60,8 @@ private struct MenuBarLabelView: View {
         switch store.pinnedQuotaState(now: now) {
         case .none:
             return nil
+        case .unavailable:
+            return "Pin: No Data"
         case .missing:
             return "Pin: Missing"
         case .available(_, let quota, let isStale):
@@ -72,6 +74,8 @@ private struct MenuBarLabelView: View {
         switch store.pinnedQuotaState(now: now) {
         case .none:
             return "aisubdash usage monitor"
+        case .unavailable:
+            return "aisubdash, pinned quota data unavailable"
         case .missing:
             return "aisubdash, pinned quota missing"
         case .available(let account, let quota, let isStale):
@@ -138,7 +142,7 @@ private struct MenuBarContentView: View {
 
             if store.selectedSource == .tailscale {
                 HStack(spacing: 6) {
-                    TextField("https://host.ts.net or http://100.x.x.x:6736", text: $tailscaleDraft)
+                    TextField("https://host.tailnet.ts.net or http://100.x.x.x:6736", text: $tailscaleDraft)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Tailscale endpoint URL")
                         .onSubmit {
@@ -400,8 +404,8 @@ private struct QuotaRowView: View {
             }
 
             ProgressView(
-                value: min(max(quota.used, 0), max(quota.limit, 1)),
-                total: max(quota.limit, 1)
+                value: min(quota.used, quota.limit),
+                total: quota.limit
             )
             .accessibilityLabel("\(quota.label) usage")
             .accessibilityValue(QuotaFormatter.detailedValue(quota))

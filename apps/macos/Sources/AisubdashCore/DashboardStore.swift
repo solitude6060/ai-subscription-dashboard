@@ -15,6 +15,7 @@ public enum RequestStatus: Equatable, Sendable {
 
 public enum PinnedQuotaState: Equatable, Sendable {
     case none
+    case unavailable
     case missing(id: String)
     case available(account: UsageAccount, quota: UsageQuota, isStale: Bool)
 }
@@ -218,6 +219,10 @@ public final class DashboardStore {
             else {
                 return
             }
+            if Task.isCancelled || error is CancellationError {
+                status = .idle
+                return
+            }
             lastRefreshWarning = "Provider refresh failed. \(Self.genericErrorMessage(for: error))"
             await performGet(expectedEndpoint: capturedEndpoint, expectedGeneration: capturedGeneration)
         }
@@ -260,7 +265,7 @@ public final class DashboardStore {
             return .none
         }
         guard let accounts = dashboard?.accounts else {
-            return .missing(id: pinnedQuotaID)
+            return .unavailable
         }
         for account in accounts {
             if let quota = account.quotas.first(where: { $0.id == pinnedQuotaID }) {
@@ -320,6 +325,7 @@ public final class DashboardStore {
 
         do {
             let loaded = try await loadDashboard(capturedEndpoint)
+            try Task.checkCancellation()
             guard currentEndpoint == capturedEndpoint,
                   generation == capturedGeneration
             else {
@@ -334,6 +340,10 @@ public final class DashboardStore {
             guard currentEndpoint == capturedEndpoint,
                   generation == capturedGeneration
             else {
+                return
+            }
+            if Task.isCancelled || error is CancellationError {
+                status = .idle
                 return
             }
             failedEndpoints.insert(capturedEndpoint)

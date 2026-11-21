@@ -10,6 +10,6 @@ let package = Package(
     targets: [
         .target(name: "AisubdashCore"),
         .executableTarget(name: "AisubdashMac", dependencies: ["AisubdashCore"]),
-        .testTarget(name: "AisubdashCoreTests", dependencies: ["AisubdashCore"]),
+        .testTarget(name: "AisubdashCoreTests", dependencies: ["AisubdashCore", "AisubdashMac"]),
     ]
 )
