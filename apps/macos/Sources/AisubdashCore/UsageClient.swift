@@ -51,11 +51,12 @@ final class URLSessionUsageTransport: UsageTransport, @unchecked Sendable {
 public struct UsageClient: Sendable {
     private static let getTimeoutSeconds: TimeInterval = 12
     private static let refreshTimeoutSeconds: TimeInterval = 120
+    private static let defaultTransport = URLSessionUsageTransport()
 
     private let transport: any UsageTransport
 
     public init() {
-        self.transport = URLSessionUsageTransport()
+        self.transport = Self.defaultTransport
     }
 
     init(transport: any UsageTransport) {

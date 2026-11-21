@@ -15,7 +15,7 @@ open "$HOME/Applications/aisubdash.app"
 ```
 
 The script builds for the architecture of that Mac and signs the bundle for local use.
-Install from the local build. The app stays in the menu bar. To start it at login, add
+Use a clean output directory when building an update. The app stays in the menu bar. To start it at login, add
 it in System Settings under General → Login Items.
 
 ## Choose A Source
