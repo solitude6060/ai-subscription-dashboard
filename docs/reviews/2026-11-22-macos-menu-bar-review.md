@@ -25,3 +25,9 @@ aliased IPv4 address. The app's actual menu interaction and private tailnet conn
 still require the target Mac.
 
 [Apple session proxy settings](https://developer.apple.com/documentation/foundation/urlsessionconfiguration/connectionproxydictionary.md)
+
+Gemini 4 Neon separately blocked the initial revision. It identified a possible
+main-queue deadlock when SwiftUI starts from the async entry point. A synchronous
+GUI entry point preserves AppKit's startup context. Neon also traced request
+cancellation from popover dismissal into the generic stale-network-error branch.
+Exercise both the cancelled-read state and ordinary GUI launch during remediation.
