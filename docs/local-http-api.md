@@ -1,5 +1,7 @@
 # Local HTTP API
 
+This page describes the legacy Tauri API. The [native aisubdash menu-bar app](macos-menu-bar.md) uses the Bun Web API.
+
 OpenUsage exposes a read-only HTTP API on the loopback interface by default so other local apps can consume the same usage data shown in the menu bar.
 
 **Base URL:** `http://127.0.0.1:6736`
