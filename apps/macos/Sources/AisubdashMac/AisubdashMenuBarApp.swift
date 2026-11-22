@@ -44,16 +44,18 @@ private struct MenuBarLabelView: View {
     let store: DashboardStore
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            HStack(spacing: 4) {
-                Image(systemName: "gauge.with.dots.needle.33percent")
-                if let labelText = labelText(now: context.date) {
-                    Text(labelText)
-                        .monospacedDigit()
-                }
+        // A TimelineView in a MenuBarExtra label hides the status item on macOS 27.2.
+        // ponytail: the label re-evaluates when the @Observable store changes, at least on
+        // each 60 s poll, so a stale transition can appear up to 60 s late.
+        let now = Date()
+        HStack(spacing: 4) {
+            Image(systemName: "gauge.with.dots.needle.33percent")
+            if let labelText = labelText(now: now) {
+                Text(labelText)
+                    .monospacedDigit()
             }
-            .accessibilityLabel(accessibilityText(now: context.date))
         }
+        .accessibilityLabel(accessibilityText(now: now))
     }
 
     private func labelText(now: Date) -> String? {
