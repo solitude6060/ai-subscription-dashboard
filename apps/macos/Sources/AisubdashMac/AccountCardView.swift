@@ -22,6 +22,8 @@ struct AccountCardView: View {
         if let reorder {
             card
                 .dropDestination(for: String.self) { ids, _ in
+                    // The list reorders inside this action, which may skip isTargeted(false).
+                    isDropTargeted = false
                     guard let id = ids.first else { return false }
                     return reorder.drop(id)
                 } isTargeted: { isDropTargeted = $0 }
@@ -35,6 +37,7 @@ struct AccountCardView: View {
                 }
         } else {
             card
+                .onAppear { isDropTargeted = false }
         }
     }
 
