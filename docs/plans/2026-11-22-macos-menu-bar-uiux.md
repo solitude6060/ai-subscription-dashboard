@@ -59,22 +59,35 @@ Owner requests from the 2026-11-22 Mac verification:
   and settings; a back button returns). No separate window.
 - Contents: the Tailscale origin field with Apply (moved, behavior unchanged) and, for the
   selected source, one toggle per provider account in the loaded dashboard: "Show".
-- Visibility is stored per source endpoint, mirroring `pinsByOrigin`: a new
-  `DashboardPreferences.hiddenProvidersByOrigin: [String: [String]]` keyed by the same
-  origin string, values are provider IDs (`providerId`, including account suffixes).
-- Default: every provider is shown. Hidden providers are removed from the list only; they
-  are still loaded, so the pin can stay on a visible provider. Hiding the provider of the
-  pinned quota keeps the pin and the menu bar value.
-- A provider ID that no longer appears in the dashboard keeps its stored setting.
+- Default visibility follows the data: an account is shown when its decoded `quotas` is
+  non-empty, and hidden otherwise. On 2026-11-22 the This Mac source listed 20 enabled
+  providers, of which 3 had quota lines (16 reported `lastError`, `manual` had no snapshot);
+  the tailnet source listed 8, of which 7 had quota lines.
+- Each settings toggle shows the effective state. Changing it stores an explicit override
+  for that provider and source; an override wins over the data rule. A "Reset to automatic"
+  button clears the overrides of the selected source.
+- Overrides are stored per source endpoint, mirroring `pinsByOrigin`: a new
+  `DashboardPreferences.visibilityOverridesByOrigin: [String: [String: Bool]]` keyed by the
+  same origin string, inner keys are provider IDs (`providerId`, including account suffixes),
+  `true` shows and `false` hides.
+- Settings list every enabled provider of the loaded dashboard, including hidden ones, each
+  with a short state: quota count, "No data", or "Refresh failed".
+- Hidden accounts are removed from the list only; they are still loaded. Hiding the
+  provider of the pinned quota keeps the pin and the menu bar value.
+- An account shown by override without quotas displays "No quota reported" and its badges.
+- A provider ID that no longer appears in the dashboard keeps its stored override.
+- The status line shows "N hidden" when accounts are hidden, which opens settings.
 
 ## Tests (Red then Green, `AisubdashCore`)
 
 - `QuotaFormatter` (moved to `AisubdashCore` so it is testable): time until reset
   (`in 45m`, `in 3h 12m`, `in 2d 4h`, `Reset due` when past), usage fraction clamped to 0...1,
   usage level from the thresholds (69.9 normal, 70 warning, 90 critical).
-- `DashboardStore.visibleAccounts`: all shown by default; hiding filters by exact provider
-  ID; settings are per source and survive a new store instance with the same preferences;
-  hiding does not clear the pin.
+- `DashboardStore.visibleAccounts`: accounts with quotas shown and accounts without quotas
+  hidden by default; an override `true` shows an account without quotas and `false` hides
+  one with quotas; overrides match the exact provider ID; overrides are per source and
+  survive a new store instance with the same preferences; reset clears only the selected
+  source; hiding does not clear the pin; `hiddenAccountCount` matches the filter.
 - Existing 25 tests stay green.
 
 View code has no unit tests (XCTest has no `MenuBarExtra` panel). The owner checks the
