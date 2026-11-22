@@ -75,3 +75,16 @@ Not checked by the reviewer: live provider refreshes and menu interaction.
 The approved app ran (process present) but showed no status item. Single-variable minimal
 apps isolated `TimelineView` in the `MenuBarExtra` label as the cause. The hosted GUI smoke
 check only verifies process start, so CI could not detect it. Fixed; see the fix log.
+
+## Re-review of the finding 11 remediation
+
+Target: `git diff 93fc82c 9dcf600`. Reviewer: Codex `gpt-6.1-sol`, `model_reasoning_effort=high`,
+`--sandbox read-only`, fresh context. Transcript in `reviews/pr69-owner-mac-r2/`.
+
+| Verdict | Severity | Finding |
+| --- | --- | --- |
+| REQUEST_CHANGES | MEDIUM | Without the timeline, the label re-evaluates only when an observed store property changes. Observation skips notifications for equal values, so a poll that returns an identical snapshot triggers no update and the `(Stale)` suffix can stay absent indefinitely. The commit's "at most 60 seconds late" statement is incorrect. The reviewer measured 0 notifications for an identical successful reload. Remedy: an independent observable clock, testable with `withObservationTracking`. |
+
+Owner-Mac finding 12: account rows do not expand in either source. Minimal `.window`
+MenuBarExtra apps with a `DisclosureGroup` bound to a `@State` dictionary did not expand
+with or without a `TimelineView`. Isolation continues.
