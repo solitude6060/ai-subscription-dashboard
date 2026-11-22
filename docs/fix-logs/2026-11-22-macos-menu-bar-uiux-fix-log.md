@@ -95,3 +95,9 @@ screen height. Both caps now follow `NSScreen.main.visibleFrame.height` (list: m
 panel: minus 40 pt; 800 pt when no screen is reported). The settings list keeps 340 pt.
 Layout only, no unit test: the value depends on the attached display. Checked by build and
 on the owner Mac. Files: `Sources/AisubdashMac/MenuBarContentView.swift`, the plan.
+
+Follow-up (build `aisubdash-uiux-r4`): the screen-relative cap alone did not grow the list,
+because the `ScrollView` reports almost no ideal height in the panel. The card stack's
+height is now measured with `onGeometryChange` and the scroll area is sized to
+`min(measured, visible screen height - 200 pt)`, so cards that fit show without
+scrolling. 43 tests pass; build and codesign pass. Owner panel check pending.

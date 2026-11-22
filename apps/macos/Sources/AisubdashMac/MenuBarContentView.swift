@@ -8,6 +8,7 @@ struct MenuBarContentView: View {
     @State private var showingSettings = false
     @State private var tailscaleDraft = ""
     @State private var invalidOrigin = false
+    @State private var accountsContentHeight: CGFloat = 0
 
     private static let originInstructions = "Enter a Tailscale HTTPS URL or direct Tailscale IPv4 address and port."
 
@@ -237,8 +238,13 @@ struct MenuBarContentView: View {
                         }
                     }
                     .padding(.vertical, 2)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                        accountsContentHeight = $0
+                    }
                 }
-                .frame(maxHeight: screenHeight - 200)
+                // A ScrollView proposes almost no ideal height in the panel, so size it to
+                // the measured cards and scroll only beyond the screen cap.
+                .frame(height: min(max(accountsContentHeight, 1), screenHeight - 200))
             } else if hiddenCount > 0 {
                 ContentUnavailableView {
                     Label(ProviderCountFormatter.allHidden(hiddenCount), systemImage: "eye.slash")
