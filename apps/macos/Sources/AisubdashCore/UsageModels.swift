@@ -14,8 +14,6 @@ public struct UsageQuota: Hashable, Sendable, Identifiable {
     public let format: UsageQuotaFormat
     public let resetsAt: Date?
 
-    public static func providerID(fromID id: String) -> String? { nil }
-
     public init(
         id: String,
         label: String,
@@ -30,6 +28,43 @@ public struct UsageQuota: Hashable, Sendable, Identifiable {
         self.limit = limit
         self.format = format
         self.resetsAt = resetsAt
+    }
+
+    public static func providerID(fromID id: String) -> String? {
+        var bytes = Array(id.utf8)[...]
+        guard let providerID = readIDField(from: &bytes),
+              readIDField(from: &bytes) != nil,
+              bytes.first == 0x3A,
+              positiveDecimal(bytes.dropFirst()) != nil
+        else {
+            return nil
+        }
+        return providerID
+    }
+
+    private static func readIDField(from bytes: inout ArraySlice<UInt8>) -> String? {
+        guard let separator = bytes.firstIndex(of: 0x3A),
+              let byteCount = positiveDecimal(bytes[..<separator])
+        else {
+            return nil
+        }
+        let payload = bytes[bytes.index(after: separator)...]
+        guard byteCount <= payload.count,
+              let field = String(bytes: payload.prefix(byteCount), encoding: .utf8)
+        else {
+            return nil
+        }
+        bytes = payload.dropFirst(byteCount)
+        return field
+    }
+
+    private static func positiveDecimal(_ bytes: ArraySlice<UInt8>) -> Int? {
+        guard let first = bytes.first, (0x31...0x39).contains(first),
+              bytes.allSatisfy({ (0x30...0x39).contains($0) })
+        else {
+            return nil
+        }
+        return Int(String(decoding: bytes, as: UTF8.self))
     }
 }
 
