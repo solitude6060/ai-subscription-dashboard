@@ -59,8 +59,9 @@ Owner requests from the 2026-11-22 Mac verification:
 - Near-limit summary: when any visible quota is critical, the status line shows
   `N near limit`.
 - Sorting: accounts keep the server order. A user-chosen order is out of scope.
-- Panel width 400 pt fixed. The account list is a `ScrollView` with `maxHeight: 470`; the
-  whole panel stays within about 580 pt.
+- Panel width 400 pt fixed. The account list is a `ScrollView` capped at the visible screen
+  height minus 200 pt; the whole panel is capped at the visible screen height minus 40 pt
+  (owner feedback: a 470 pt list scrolled constantly).
 - No fixed row heights, so text can grow without clipping.
 
 ### Header and source
@@ -98,7 +99,7 @@ Owner requests from the 2026-11-22 Mac verification:
   unchanged), `Reset to automatic` above the provider list (outside the scroll area), and
   the provider list in a `ScrollView` with `maxHeight: 340`. Without a loaded dashboard the
   list area shows `Connect a source to manage providers`.
-- The main footer is hidden in settings. The panel stays within about 580 pt in both modes.
+- The main footer is hidden in settings. The panel uses the same screen-relative cap in both modes.
 - One switch-style toggle per enabled provider account; the provider name is the toggle
   label and a `.caption` subtitle shows its state: `N quotas`, `No data`, `Refresh failed`,
   or `N quotas · Refresh failed`. Providers with quotas are listed before those without.

@@ -15,6 +15,10 @@ struct MenuBarContentView: View {
         self.store = store
     }
 
+    /// Visible height of the screen showing the panel; the panel and account list grow
+    /// to it so the list scrolls only when the cards do not fit.
+    private var screenHeight: CGFloat { NSScreen.main?.visibleFrame.height ?? 800 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
@@ -34,7 +38,7 @@ struct MenuBarContentView: View {
         }
         .padding(12)
         .frame(width: 400)
-        .frame(maxHeight: 580)
+        .frame(maxHeight: screenHeight - 40)
         .background {
             PanelDismissalObserver { showingSettings = false }
                 .frame(width: 0, height: 0)
@@ -234,7 +238,7 @@ struct MenuBarContentView: View {
                     }
                     .padding(.vertical, 2)
                 }
-                .frame(maxHeight: 470)
+                .frame(maxHeight: screenHeight - 200)
             } else if hiddenCount > 0 {
                 ContentUnavailableView {
                     Label(ProviderCountFormatter.allHidden(hiddenCount), systemImage: "eye.slash")

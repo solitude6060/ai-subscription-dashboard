@@ -86,3 +86,12 @@ Swift syntax parsing and `git diff --check` exited 0. The source scan for
 `TimelineView`, `DisclosureGroup`, and `LazyVStack` found only the existing comment
 at `Sources/AisubdashMac/AisubdashMenuBarApp.swift:59`. The panel and VoiceOver
 checks are pending a successful macOS build.
+
+## Owner feedback: account list height
+
+Owner report on build `aisubdash-uiux-r2`: the account list needed constant scrolling.
+The list was capped at 470 pt and the panel at 580 pt, about half of the owner's visible
+screen height. Both caps now follow `NSScreen.main.visibleFrame.height` (list: minus 200 pt,
+panel: minus 40 pt; 800 pt when no screen is reported). The settings list keeps 340 pt.
+Layout only, no unit test: the value depends on the attached display. Checked by build and
+on the owner Mac. Files: `Sources/AisubdashMac/MenuBarContentView.swift`, the plan.
