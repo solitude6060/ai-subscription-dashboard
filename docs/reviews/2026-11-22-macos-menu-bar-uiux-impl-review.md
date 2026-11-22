@@ -28,3 +28,18 @@ Neon findings, each checked against the cited code:
 
 Transcripts are retained locally in the sibling artifacts directory
 (`reviews/uiux-impl-neon-r1/`).
+
+## Remediation re-review
+
+Target: `git diff b5317cd..f5d2672` (`1e7fdad` test, `f5d2672` fix, Codex `gpt-6.2-sol` high).
+Orchestrator verification: the `1e7fdad` tests fail on assertions (for example
+`"1 quotas" is not equal to "1 quota"`); at `f5d2672` `swift test` runs 43 tests with
+0 failures, `build-app.sh` and `codesign --verify --strict` pass, and `TimelineView`,
+`DisclosureGroup` and `LazyVStack` do not occur in `apps/macos/Sources` outside one comment.
+
+| Reviewer | Verdict | Findings |
+| --- | --- | --- |
+| AGY `gemini-4-neon-high`, effort high, fresh context | APPROVE | All eight resolved; no new findings |
+
+Transcript in `reviews/uiux-impl-neon-r2/`. Not verified: VoiceOver speech and the panel on
+the owner Mac (build `~/Applications/aisubdash-uiux-r2` awaits owner feedback).
