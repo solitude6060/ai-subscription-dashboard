@@ -350,7 +350,10 @@ private struct AccountRowView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(account.name), \(isExpanded ? "collapse" : "expand")")
+            // Keep the header (name, badges, reading age) as the label; expose state separately.
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Collapses the quotas" : "Shows the quotas")
 
             if isExpanded {
                 details
