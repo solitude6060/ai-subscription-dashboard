@@ -66,6 +66,33 @@ final class DashboardStoreTests: XCTestCase {
         XCTAssertEqual(store.pinnedQuotaID, "codex:work::5h")
     }
 
+    func testClockTickNotifiesObserversAndAgesAnUnchangedPinnedReading() async {
+        let observedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let dashboard = Self.makeDashboard(accountID: "codex", quotaLabel: "5h", used: 40, limit: 100)
+        let store = DashboardStore(
+            preferences: InMemoryDashboardPreferences(),
+            loadDashboard: { _ in dashboard },
+            refreshLocalProviders: { 0 }
+        )
+        store.tick(now: observedAt.addingTimeInterval(60))
+        await store.reload()
+        store.togglePin(quotaID: "codex::5h")
+        guard case .available(_, _, false) = store.pinnedQuotaState(now: store.clock) else {
+            return XCTFail("fresh pinned reading expected")
+        }
+
+        // An identical reload changes no observed value, so only the clock can age the label.
+        var notified = false
+        withObservationTracking { _ = store.clock } onChange: { notified = true }
+        await store.reload()
+        store.tick(now: observedAt.addingTimeInterval(DashboardStore.staleAgeThresholdSeconds + 60))
+
+        XCTAssertTrue(notified)
+        guard case .available(_, _, true) = store.pinnedQuotaState(now: store.clock) else {
+            return XCTFail("stale pinned reading expected after the clock passes the threshold")
+        }
+    }
+
     func testPinIsNotMissingBeforeItsSourceLoads() {
         let preferences = InMemoryDashboardPreferences(
             pinsByOrigin: [UsageEndpoint.local.origin.absoluteString: "codex:work::5h"]
