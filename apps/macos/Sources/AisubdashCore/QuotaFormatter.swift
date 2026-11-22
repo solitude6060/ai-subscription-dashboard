@@ -26,7 +26,7 @@ public enum QuotaFormatter {
         date.formatted(date: .abbreviated, time: .shortened)
     }
 
-    public static func resetCountdown(_ resetsAt: Date?, now: Date) -> String? {
+    public static func resetCountdown(_ resetsAt: Date?, now: Date, spoken: Bool = false) -> String? {
         guard let resetsAt else { return nil }
         let seconds = resetsAt.timeIntervalSince(now)
         guard seconds > 0 else { return "Reset due" }

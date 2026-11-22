@@ -24,6 +24,15 @@ final class QuotaFormatterTests: XCTestCase {
         XCTAssertNil(QuotaFormatter.resetCountdown(nil, now: now))
     }
 
+    func testSpokenResetCountdownDescribesFutureReset() {
+        let future = now.addingTimeInterval(3 * 3600 + 12 * 60)
+        XCTAssertEqual(QuotaFormatter.resetCountdown(future, now: now, spoken: true), "Resets in 3h 12m")
+        XCTAssertEqual(QuotaFormatter.resetCountdown(now.addingTimeInterval(1), now: now, spoken: true), "Resets in <1m")
+        XCTAssertEqual(QuotaFormatter.resetCountdown(now, now: now, spoken: true), "Reset due")
+        XCTAssertEqual(QuotaFormatter.resetCountdown(now.addingTimeInterval(-1), now: now, spoken: true), "Reset due")
+        XCTAssertNil(QuotaFormatter.resetCountdown(nil, now: now, spoken: true))
+    }
+
     func testReadingAge() {
         let cases: [(TimeInterval, String)] = [
             (-1, "<1m ago"),
