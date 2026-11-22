@@ -95,3 +95,14 @@ expanded in the same panel style; `DisclosureGroup` did not. Fixed; see the fix 
 Model note: the finding 1 and finding 11 re-reviews ran `gpt-6.1-sol` from the routing
 registry installed on this Mac at that time (2026-10-06). The registry updated on
 2026-11-22 names `gpt-6.2-sol` for this lane; later re-reviews use it.
+
+## Re-review of the clock and disclosure remediations
+
+Target: `git diff d9b7ee2 b238496`. Reviewer: Codex `gpt-6.2-sol`, `model_reasoning_effort=high`,
+`--sandbox read-only`, fresh context. Transcript in `reviews/pr69-owner-mac-r3/`.
+
+| Verdict | Severity | Finding | Verified | Disposition |
+| --- | --- | --- | --- | --- |
+| REQUEST_CHANGES | MEDIUM | The row's explicit VoiceOver label dropped the badges and reading age | Yes, `AisubdashMenuBarApp.swift:353` | Fixed: combined label, expansion state as value |
+| | LOW | With a no-op `tick` the test failed in setup, before the observer was registered | Yes, the earlier red run failed at "fresh pinned reading expected" | Fixed: reading dated at the initial clock; the no-op run now fails at the notification assertion |
+| | LOW | `onChange` mutated a captured var (Swift 6 error) | Yes, compiler warning at `DashboardStoreTests.swift:86` | Fixed: `LockedBox` |
