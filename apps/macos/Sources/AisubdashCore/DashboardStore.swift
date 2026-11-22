@@ -363,9 +363,7 @@ public final class DashboardStore {
             guard let endpoint = currentEndpoint else {
                 dashboard = nil
                 isUsingCachedFallback = false
-                status = selectedSource == .tailscale
-                    ? .failed("Enter a valid Tailscale origin.")
-                    : .idle
+                status = .idle
                 return
             }
             capturedEndpoint = endpoint
