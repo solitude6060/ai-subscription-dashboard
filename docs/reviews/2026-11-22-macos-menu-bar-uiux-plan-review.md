@@ -24,3 +24,21 @@ effect while slash commands are disabled. `git status` was clean after the run.
 
 Optional suggestions adopted: near-limit count, muted unpinned pins, providers with quotas
 listed first in settings, header truncation priority.
+
+## Remediation re-review
+
+Target: `git diff fbdfbc0 733ab31` of the plan. Reviewer: AGY `gemini-4-neon-high`, effort high,
+fresh context. Transcript in `reviews/uiux-plan-neon-r2/`. `git status` was clean after the run.
+Earlier findings: 7 resolved, 3 partly resolved.
+
+| Verdict | Severity | New finding | Verified | Disposition |
+| --- | --- | --- | --- | --- |
+| REQUEST_CHANGES | HIGH | One status line cannot hold summary, status, `N hidden` and `N near limit`; idle omission drops `Stale (cached)`; a button inside the combined status element breaks VoiceOver | Yes, `AisubdashMenuBarApp.swift:180-189` combines the status row; `Stale (cached)` at line 305 | Two status rows, `N hidden` outside the combined element, only normal `Ready` omitted |
+| | MEDIUM | `Reset due` and badges keep orange text | Yes, badges at lines 397-406 | `.primary` text after a tinted named icon |
+| | MEDIUM | Settings height, header rows, reset placement and footer unspecified | Plan text | Two header rows, reset outside the scroll area, `maxHeight: 340`, footer hidden |
+| | MEDIUM | Missing-origin red status suppressed only in the list | Yes, `DashboardStore.swift:315-317` | Store leaves `status` idle; test added to the plan |
+| | LOW | Label truncation priority, zero-limit and zero-hour formats, Unpin when the pinned quota is missing | Plan text | Specified; pinned owner parsed from the length-prefixed quota ID (`UsageModels.makeQuota`), verified by reading the decoder |
+
+Review budget for this target (one round and one remediation re-review) is used. The
+remaining changes were applied without a further review round; the owner decides whether
+another round runs before implementation.
