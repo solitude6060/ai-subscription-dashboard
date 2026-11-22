@@ -272,7 +272,7 @@ public final class DashboardStore {
         visibleAccounts.flatMap(\.quotas).filter { QuotaFormatter.usageLevel($0) == .critical }.count
     }
 
-    public var hasCustomOrder: Bool { false }
+    public var hasCustomOrder: Bool { !accountOrder.isEmpty }
 
     public var hasVisibilityOverrides: Bool { !visibilityOverrides.isEmpty }
 
@@ -296,7 +296,11 @@ public final class DashboardStore {
         preferences.visibilityOverridesByOrigin.removeValue(forKey: origin)
     }
 
-    public func resetAccountOrder() {}
+    public func resetAccountOrder() {
+        guard let origin = currentEndpoint?.origin.absoluteString else { return }
+        accountOrder = []
+        preferences.orderByOrigin.removeValue(forKey: origin)
+    }
 
     public func reload() async {
         guard inFlightPostGeneration != generation,
