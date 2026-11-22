@@ -88,3 +88,10 @@ Target: `git diff 93fc82c 9dcf600`. Reviewer: Codex `gpt-6.1-sol`, `model_reason
 Owner-Mac finding 12: account rows do not expand in either source. Minimal `.window`
 MenuBarExtra apps with a `DisclosureGroup` bound to a `@State` dictionary did not expand
 with or without a `TimelineView`. Isolation continues.
+
+Finding 12 isolation result: a `Button` toggling `@State` or an `@Observable` property
+expanded in the same panel style; `DisclosureGroup` did not. Fixed; see the fix log.
+
+Model note: the finding 1 and finding 11 re-reviews ran `gpt-6.1-sol` from the routing
+registry installed on this Mac at that time (2026-10-06). The registry updated on
+2026-11-22 names `gpt-6.2-sol` for this lane; later re-reviews use it.
