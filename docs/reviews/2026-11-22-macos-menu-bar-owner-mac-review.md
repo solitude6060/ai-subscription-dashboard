@@ -51,3 +51,21 @@ time. `lastRefreshAt` from `/api/providers` reflects the refresh.
   (`/private/var/folders`), so exact-path fault injection does not match. With
   `TMPDIR="$(realpath "$TMPDIR")"` the suite reports 632 pass, 2 skip, 0 fail. PR #69 does
   not change these files.
+
+## Re-review of the finding 1 remediation
+
+Target: `git diff 6f70442 5ac751f` (`c01d6d4` test, `23cb872` fix, `5ac751f` fix log).
+Reviewer: Codex `gpt-6.1-sol`, `model_reasoning_effort=high`, `--sandbox read-only`, fresh
+context, a different model family from the implementing context (Claude `claude-opus-5-5`).
+Transcript retained locally in the sibling artifacts directory (`reviews/pr69-owner-mac-r1/`).
+
+| Verdict | Findings |
+| --- | --- |
+| APPROVE | None |
+
+The reviewer reproduced the new test failing against `6f70442` (observed `05:00:00`,
+expected `06:18:52.623`) and passing against `5ac751f`, and ran the macOS suite: 24 tests,
+0 failures. Recorded residual risk: a collector that reports success without writing a new
+snapshot would have its previous snapshot dated by the refresh. The current snapshot-producing
+collectors return a snapshot on success (`minimax.ts:83`, `openusage-plugin.ts:298`).
+Not checked by the reviewer: live provider refreshes and menu interaction.
