@@ -165,6 +165,36 @@ final class UsageContractTests: XCTestCase {
         XCTAssertEqual(dashboard.accounts.map(\.quotas), secondDecode.accounts.map(\.quotas))
     }
 
+    func testObservedAtUsesSuccessfulRefreshTimeWhenSnapshotStartsAtWindowStart() throws {
+        // MiniMax snapshots carry the quota window start as startedAt (minimax.ts readTimes).
+        let providersJSON = Data("""
+        [
+          { "providerId": "minimax", "name": "MiniMax", "enabled": true,
+            "lastRefreshAt": "2026-11-22T06:18:52.623Z" },
+          { "providerId": "minimax:failed", "name": "MiniMax Failed", "enabled": true,
+            "lastRefreshAt": "2026-11-22T06:18:52.623Z", "lastError": "Provider refresh failed" },
+          { "providerId": "codex", "name": "Codex", "enabled": true,
+            "lastRefreshAt": "2026-11-22T06:18:52.623Z" }
+        ]
+        """.utf8)
+        let snapshotsJSON = Data("""
+        [
+          { "providerId": "minimax", "startedAt": "2026-11-22T05:00:00.000Z", "raw": { "lines": [] } },
+          { "providerId": "minimax:failed", "startedAt": "2026-11-22T05:00:00.000Z", "raw": { "lines": [] } }
+        ]
+        """.utf8)
+
+        let dashboard = try UsageContractDecoder.decode(providersData: providersJSON, snapshotsData: snapshotsJSON)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        XCTAssertEqual(dashboard.accounts[0].observedAt, iso.date(from: "2026-11-22T06:18:52.623Z"))
+        // A failed refresh must not make the older snapshot look fresh.
+        XCTAssertEqual(dashboard.accounts[1].observedAt, iso.date(from: "2026-11-22T05:00:00.000Z"))
+        // Without a snapshot there is no reading to date.
+        XCTAssertNil(dashboard.accounts[2].observedAt)
+    }
+
     func testMixedSnapshotsDisabledProvidersAndZeroVersusMissing() throws {
         let providersJSON = Data("""
         [
