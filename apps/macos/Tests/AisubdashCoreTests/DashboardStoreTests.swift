@@ -54,6 +54,28 @@ final class DashboardStoreTests: XCTestCase {
         XCTAssertEqual(store.currentEndpoint?.origin.absoluteString, "https://box.tailnet.ts.net")
     }
 
+    func testReloadWithNoValidTailscaleOriginStaysIdle() async {
+        for origin in ["", "https://example.com"] {
+            let store = DashboardStore(
+                preferences: InMemoryDashboardPreferences(
+                    selectedSource: .tailscale,
+                    tailscaleOriginInput: origin
+                ),
+                loadDashboard: { _ in
+                    XCTFail("A source without a valid origin must not issue a request")
+                    throw UsageClientError.invalidResponse
+                }
+            )
+
+            await store.reload()
+
+            XCTAssertNil(store.currentEndpoint)
+            XCTAssertNil(store.dashboard)
+            XCTAssertFalse(store.isUsingCachedFallback)
+            XCTAssertEqual(store.status, .idle)
+        }
+    }
+
     func testPinsFollowTheirEndpointWhenBothSourcesHaveTheSameQuota() {
         let store = DashboardStore(preferences: InMemoryDashboardPreferences())
         store.togglePin(quotaID: "codex:work::5h")
