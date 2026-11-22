@@ -13,3 +13,10 @@ Verdict: REQUEST_CHANGES. Each finding was checked against the plan and the cite
 | 4 | MEDIUM | Handle size ambiguous, thin glyph hit-testing, handle shown for a single card | Yes | `.caption` glyph in a 22 x 22 pt frame with `contentShape`; handle and drop only with two or more cards |
 | 5 | MEDIUM | Self highlight, external text accepted, `stroke` clipping | Partly | `strokeBorder`; drop accepts only visible IDs. Not adopted: payload nonce or custom UTType, and self-highlight suppression; a matching external string only reorders, which the user can undo |
 | 6 | LOW | `K` was not tested inside the capped `ScrollView`; owner checks and `docs/macos-menu-bar.md` missing | Yes | Owner checks extended; doc update listed |
+
+## Re-review of the revision
+
+Target: `git diff 6387353..0b4dedb -- docs/plans/2026-11-22-macos-menu-bar-reorder.md`.
+Reviewer: AGY `gemini-4-neon-high`, effort high, fresh context. Transcript in
+`reviews/reorder-plan-neon-r2/`. Verdict: APPROVE. Findings 1-4 and 6 resolved; finding 5
+partial by decision, accepted by the reviewer. No new findings.
