@@ -24,3 +24,9 @@ See the [owner-Mac review](../reviews/2026-11-22-macos-menu-bar-owner-mac-review
 | Verified finding | Test and repair |
 | --- | --- |
 | MiniMax readings marked stale one hour into each quota window | `testObservedAtUsesSuccessfulRefreshTimeWhenSnapshotStartsAtWindowStart` failed with 05:00:00 observed against an expected 06:18:52 refresh. `UsageContractDecoder` now uses the later of snapshot `startedAt` and provider `lastRefreshAt` when `lastError` is absent. A failed refresh keeps the snapshot time because the server also writes `lastRefreshAt` on failure (`apps/server/src/index.ts`). The macOS suite passes 24 tests. Files: `UsageModels.swift`, `UsageContractTests.swift`. |
+
+## Owner-Mac verification, missing menu bar icon
+
+| Verified finding | Evidence and repair |
+| --- | --- |
+| The menu bar icon did not appear on macOS 27.2.1 although the GUI process ran | Minimal MenuBarExtra apps on the owner's Mac, one variable each: plain `Image`, `HStack` with `Text`, and `.menuBarExtraStyle(.window)` labels appeared; a `TimelineView` label did not. Removed the `TimelineView` from `MenuBarLabelView`; the label re-evaluates on observable store changes, at least once per 60-second poll. The owner confirmed the rebuilt icon. No unit test: XCTest has no system menu bar. The hosted GUI smoke check verifies process start only and cannot detect this. File: `AisubdashMenuBarApp.swift`. |

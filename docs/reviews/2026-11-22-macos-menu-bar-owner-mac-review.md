@@ -69,3 +69,9 @@ expected `06:18:52.623`) and passing against `5ac751f`, and ran the macOS suite:
 snapshot would have its previous snapshot dated by the refresh. The current snapshot-producing
 collectors return a snapshot on success (`minimax.ts:83`, `openusage-plugin.ts:298`).
 Not checked by the reviewer: live provider refreshes and menu interaction.
+
+## Owner-Mac finding 11, verified: menu bar icon not shown on macOS 27.2.1
+
+The approved app ran (process present) but showed no status item. Single-variable minimal
+apps isolated `TimelineView` in the `MenuBarExtra` label as the cause. The hosted GUI smoke
+check only verifies process start, so CI could not detect it. Fixed; see the fix log.
