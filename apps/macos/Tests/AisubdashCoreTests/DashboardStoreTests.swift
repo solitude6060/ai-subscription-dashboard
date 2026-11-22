@@ -67,14 +67,19 @@ final class DashboardStoreTests: XCTestCase {
     }
 
     func testClockTickNotifiesObserversAndAgesAnUnchangedPinnedReading() async {
-        let observedAt = Date(timeIntervalSince1970: 1_700_000_000)
-        let dashboard = Self.makeDashboard(accountID: "codex", quotaLabel: "5h", used: 40, limit: 100)
+        let quota = UsageQuota(id: "codex::5h", label: "5h", used: 40, limit: 100, format: .percent)
+        let loader = LockedBox<UsageDashboard?>(nil)
         let store = DashboardStore(
             preferences: InMemoryDashboardPreferences(),
-            loadDashboard: { _ in dashboard },
+            loadDashboard: { _ in loader.withLock { $0 }! },
             refreshLocalProviders: { 0 }
         )
-        store.tick(now: observedAt.addingTimeInterval(60))
+        // Date the reading at the store's initial clock, so a no-op tick still reaches the
+        // notification assertion below.
+        let observedAt = store.clock
+        loader.withLock { $0 = UsageDashboard(accounts: [UsageAccount(
+            id: "codex", name: "codex", quotas: [quota], observedAt: observedAt, refreshFailed: false
+        )]) }
         await store.reload()
         store.togglePin(quotaID: "codex::5h")
         guard case .available(_, _, false) = store.pinnedQuotaState(now: store.clock) else {
@@ -82,12 +87,12 @@ final class DashboardStoreTests: XCTestCase {
         }
 
         // An identical reload changes no observed value, so only the clock can age the label.
-        var notified = false
-        withObservationTracking { _ = store.clock } onChange: { notified = true }
+        let notified = LockedBox(false)
+        withObservationTracking { _ = store.clock } onChange: { notified.withLock { $0 = true } }
         await store.reload()
         store.tick(now: observedAt.addingTimeInterval(DashboardStore.staleAgeThresholdSeconds + 60))
 
-        XCTAssertTrue(notified)
+        XCTAssertTrue(notified.withLock { $0 })
         guard case .available(_, _, true) = store.pinnedQuotaState(now: store.clock) else {
             return XCTFail("stale pinned reading expected after the clock passes the threshold")
         }
