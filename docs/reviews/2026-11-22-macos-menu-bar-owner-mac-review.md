@@ -29,7 +29,7 @@ time. `lastRefreshAt` from `/api/providers` reflects the refresh.
 
 | ID | Finding | Severity | Verified | This PR | Reason |
 | --- | --- | --- | --- | --- | --- |
-| 1 | MiniMax observation time uses the window start | Medium | Yes | Proposed | The owner enables MiniMax; a pinned MiniMax quota shows stale on fresh data. |
+| 1 | MiniMax observation time uses the window start | Medium | Yes | Fixed | The owner enables MiniMax; a pinned MiniMax quota shows stale on fresh data. |
 | 2 | Cancelled panel-open read delays the first poll by up to 60 s | Low | No | Defer | Recovers on the next poll. |
 | 3 | `100.64.0.0/10` ATS exception key is a CIDR, not a domain | Low | No | Defer | Tailnet probe over HTTP to an IP literal passed on this Mac. |
 | 4 | Changing the Tailscale origin deletes the previous origin's pin | Low | No | Defer | Documentation or behavior decision. |

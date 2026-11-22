@@ -16,3 +16,11 @@ The Linux regression suite reproduced six failed assertions in four behavior tes
 before the repairs. The repaired suite passed 23 tests. A hosted process-start check
 exercises the GUI entry point. Interaction with the system menu bar and already
 authenticated provider accounts still requires the target Mac.
+
+## Owner-Mac review, finding 1
+
+See the [owner-Mac review](../reviews/2026-11-22-macos-menu-bar-owner-mac-review.md).
+
+| Verified finding | Test and repair |
+| --- | --- |
+| MiniMax readings marked stale one hour into each quota window | `testObservedAtUsesSuccessfulRefreshTimeWhenSnapshotStartsAtWindowStart` failed with 05:00:00 observed against an expected 06:18:52 refresh. `UsageContractDecoder` now uses the later of snapshot `startedAt` and provider `lastRefreshAt` when `lastError` is absent. A failed refresh keeps the snapshot time because the server also writes `lastRefreshAt` on failure (`apps/server/src/index.ts`). The macOS suite passes 24 tests. Files: `UsageModels.swift`, `UsageContractTests.swift`. |
