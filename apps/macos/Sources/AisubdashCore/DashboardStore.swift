@@ -20,6 +20,11 @@ public enum PinnedQuotaState: Equatable, Sendable {
     case available(account: UsageAccount, quota: UsageQuota, isStale: Bool)
 }
 
+public enum AccountMoveDirection: Sendable {
+    case up
+    case down
+}
+
 public protocol DashboardPreferences: AnyObject {
     var selectedSource: UsageSourceKind { get set }
     var tailscaleOriginInput: String { get set }
@@ -216,6 +221,16 @@ public final class DashboardStore {
         return saved + accounts.filter { rank[$0.id] == nil }
     }
 
+    @discardableResult
+    public func moveAccount(_ providerID: String, onto targetID: String) -> Bool {
+        false
+    }
+
+    @discardableResult
+    public func moveAccount(_ providerID: String, _ direction: AccountMoveDirection) -> Bool {
+        false
+    }
+
     public var visibleAccounts: [UsageAccount] {
         orderedAccounts.filter { isAccountVisible($0) }
     }
@@ -227,6 +242,8 @@ public final class DashboardStore {
     public var nearLimitCount: Int {
         visibleAccounts.flatMap(\.quotas).filter { QuotaFormatter.usageLevel($0) == .critical }.count
     }
+
+    public var hasCustomOrder: Bool { false }
 
     public var hasVisibilityOverrides: Bool { !visibilityOverrides.isEmpty }
 
