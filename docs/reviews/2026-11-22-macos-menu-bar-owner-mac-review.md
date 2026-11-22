@@ -106,3 +106,17 @@ Target: `git diff d9b7ee2 b238496`. Reviewer: Codex `gpt-6.2-sol`, `model_reason
 | REQUEST_CHANGES | MEDIUM | The row's explicit VoiceOver label dropped the badges and reading age | Yes, `AisubdashMenuBarApp.swift:353` | Fixed: combined label, expansion state as value |
 | | LOW | With a no-op `tick` the test failed in setup, before the observer was registered | Yes, the earlier red run failed at "fresh pinned reading expected" | Fixed: reading dated at the initial clock; the no-op run now fails at the notification assertion |
 | | LOW | `onChange` mutated a captured var (Swift 6 error) | Yes, compiler warning at `DashboardStoreTests.swift:86` | Fixed: `LockedBox` |
+
+## Remediation re-review of the gpt-6.2-sol findings
+
+Target: `git diff b238496 4c511a8`. Reviewer: Codex `gpt-6.2-sol`, `model_reasoning_effort=high`,
+`--sandbox read-only`, fresh context. Transcript in `reviews/pr69-owner-mac-r4/`.
+
+| Verdict | Findings |
+| --- | --- |
+| APPROVE | None |
+
+The reviewer confirmed the combined VoiceOver label from source and Apple documentation
+(live VoiceOver speech not verified), that a no-op `tick` fails at the notification
+assertion (by reading; the read-only sandbox blocked a fresh build), the existing bundle
+passing 25 tests, and no Swift 6 strict diagnostics at `4c511a8`.
