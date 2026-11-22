@@ -141,6 +141,7 @@ public final class DashboardStore {
     private let refreshLocalProviders: @Sendable () async throws -> Int
 
     private var visibilityOverrides: [String: Bool] = [:]
+    private var accountOrder: [String] = []
     private var lastGoodByEndpoint: [UsageEndpoint: UsageDashboard] = [:]
     private var failedEndpoints: Set<UsageEndpoint> = []
     private var generation: UInt64 = 0
@@ -165,6 +166,7 @@ public final class DashboardStore {
         if let origin = currentEndpoint?.origin.absoluteString {
             self.pinnedQuotaID = preferences.pinsByOrigin[origin]
             self.visibilityOverrides = preferences.visibilityOverridesByOrigin[origin] ?? [:]
+            self.accountOrder = preferences.orderByOrigin[origin] ?? []
         }
     }
 
@@ -205,12 +207,17 @@ public final class DashboardStore {
         preferences.pinsByOrigin[endpoint.origin.absoluteString] = pinnedQuotaID
     }
 
+    /// Saved IDs first in saved order, then accounts not in the saved list in server order.
+    /// Saved IDs absent from the dashboard are skipped but stay stored.
     public var orderedAccounts: [UsageAccount] {
-        dashboard?.accounts ?? []
+        let accounts = dashboard?.accounts ?? []
+        let rank = Dictionary(accountOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
+        let saved = accounts.filter { rank[$0.id] != nil }.sorted { rank[$0.id]! < rank[$1.id]! }
+        return saved + accounts.filter { rank[$0.id] == nil }
     }
 
     public var visibleAccounts: [UsageAccount] {
-        (dashboard?.accounts ?? []).filter { isAccountVisible($0) }
+        orderedAccounts.filter { isAccountVisible($0) }
     }
 
     public var hiddenAccountCount: Int {
@@ -353,11 +360,13 @@ public final class DashboardStore {
             let origin = endpoint.origin.absoluteString
             pinnedQuotaID = preferences.pinsByOrigin[origin]
             visibilityOverrides = preferences.visibilityOverridesByOrigin[origin] ?? [:]
+            accountOrder = preferences.orderByOrigin[origin] ?? []
             dashboard = lastGoodByEndpoint[endpoint]
             isUsingCachedFallback = failedEndpoints.contains(endpoint) && dashboard != nil
         } else {
             pinnedQuotaID = nil
             visibilityOverrides = [:]
+            accountOrder = []
             dashboard = nil
             isUsingCachedFallback = false
         }
