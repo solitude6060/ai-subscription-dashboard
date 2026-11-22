@@ -7,9 +7,14 @@ struct ProviderVisibilitySettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button("Reset to automatic") { store.resetVisibilityOverrides() }
-                .controlSize(.small)
-                .disabled(!store.hasVisibilityOverrides)
+            HStack(spacing: 8) {
+                Button("Reset to automatic") { store.resetVisibilityOverrides() }
+                    .controlSize(.small)
+                    .disabled(!store.hasVisibilityOverrides)
+                Button("Reset Order") { store.resetAccountOrder() }
+                    .controlSize(.small)
+                    .disabled(!store.hasCustomOrder)
+            }
             if let dashboard = store.dashboard {
                 let accounts = dashboard.accounts
                 if accounts.isEmpty {

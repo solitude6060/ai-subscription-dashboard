@@ -63,6 +63,18 @@ in **Settings**. If the pinned quota is missing, the usage panel also offers
 **Unpin** next to the warning. Your selected source, Tailscale address, and pin
 preference are saved across app restarts.
 
+## Reorder Providers
+
+When two or more providers are visible, drag a card by the handle at the left of
+its header and drop it on another card. A card dragged down lands after the card
+you drop it on, and a card dragged up lands before it. With VoiceOver, use the
+**Move Up** and **Move Down** actions on the provider header. The app remembers
+the order separately for This Mac and for each Tailscale address, including after
+an app restart. A provider that disappears keeps its place if it returns, and a
+new provider appears after the ordered ones. **Reset Order** in **Settings**
+restores the server order for the selected source and keeps your visibility
+choices.
+
 ## Choose Which Providers Appear
 
 Select the gear, press **Command–Comma**, or select the hidden provider count to

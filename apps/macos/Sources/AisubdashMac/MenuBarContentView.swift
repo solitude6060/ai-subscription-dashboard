@@ -227,13 +227,18 @@ struct MenuBarContentView: View {
             } else if !accounts.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
-                        ForEach(accounts) { account in
+                        ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
                             AccountCardView(
                                 account: account,
                                 now: now,
                                 isStale: store.isAccountStale(account, now: now),
                                 pinnedQuotaID: store.pinnedQuotaID,
-                                onTogglePin: { store.togglePin(quotaID: $0) }
+                                onTogglePin: { store.togglePin(quotaID: $0) },
+                                reorder: accounts.count < 2 ? nil : AccountCardReorder(
+                                    moveUp: index == 0 ? nil : { store.moveAccount(account.id, .up) },
+                                    moveDown: index == accounts.count - 1 ? nil : { store.moveAccount(account.id, .down) },
+                                    drop: { store.moveAccount($0, onto: account.id) }
+                                )
                             )
                         }
                     }

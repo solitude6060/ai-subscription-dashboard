@@ -2,14 +2,43 @@
 import SwiftUI
 import AisubdashCore
 
+/// Reordering callbacks for a card; absent when fewer than two cards are visible.
+struct AccountCardReorder {
+    let moveUp: (() -> Void)?
+    let moveDown: (() -> Void)?
+    let drop: (String) -> Bool
+}
+
 struct AccountCardView: View {
     let account: UsageAccount
     let now: Date
     let isStale: Bool
     let pinnedQuotaID: String?
     let onTogglePin: (String) -> Void
+    var reorder: AccountCardReorder?
+    @State private var isDropTargeted = false
 
     var body: some View {
+        if let reorder {
+            card
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let id = ids.first else { return false }
+                    return reorder.drop(id)
+                } isTargeted: { isDropTargeted = $0 }
+                .overlay {
+                    if isDropTargeted {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.accentColor, lineWidth: 2)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
             if account.quotas.isEmpty {
@@ -36,6 +65,9 @@ struct AccountCardView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
+            if reorder != nil {
+                dragHandle
+            }
             HStack(spacing: 6) {
                 Text(account.name)
                     .font(.body.weight(.semibold))
@@ -55,6 +87,31 @@ struct AccountCardView: View {
                 .fixedSize()
         }
         .accessibilityElement(children: .combine)
+        .accessibilityActions {
+            if let moveUp = reorder?.moveUp {
+                Button("Move Up", action: moveUp)
+            }
+            if let moveDown = reorder?.moveDown {
+                Button("Move Down", action: moveDown)
+            }
+        }
+    }
+
+    private var dragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .contentShape(Rectangle())
+            .help("Drag to reorder")
+            .draggable(account.id) {
+                Text(account.name)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(8)
+                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+            }
+            .accessibilityHidden(true)
     }
 }
 
