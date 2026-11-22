@@ -92,6 +92,13 @@ public final class DashboardStore {
     public private(set) var status: RequestStatus = .idle
     public private(set) var isUsingCachedFallback: Bool = false
     public private(set) var lastRefreshWarning: String?
+    public private(set) var clock = Date()
+
+    /// Advances the time the views render against; each tick notifies observers even
+    /// when no reading changed, so stale markers age without a new snapshot.
+    public func tick(now: Date = Date()) {
+        clock = now
+    }
 
     public var currentEndpoint: UsageEndpoint? {
         switch selectedSource {

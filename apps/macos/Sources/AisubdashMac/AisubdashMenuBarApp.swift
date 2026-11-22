@@ -7,8 +7,19 @@ import AisubdashCore
 final class MenuBarLifecycle: NSObject, NSApplicationDelegate {
     let store = DashboardStore()
     private var updates: Task<Void, Never>?
+    private var clockUpdates: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        clockUpdates = Task {
+            while !Task.isCancelled {
+                store.tick()
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    break
+                }
+            }
+        }
         updates = Task {
             while !Task.isCancelled {
                 await store.reload()
@@ -23,6 +34,7 @@ final class MenuBarLifecycle: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         updates?.cancel()
+        clockUpdates?.cancel()
     }
 }
 
@@ -45,9 +57,8 @@ private struct MenuBarLabelView: View {
 
     var body: some View {
         // A TimelineView in a MenuBarExtra label hides the status item on macOS 27.2.
-        // ponytail: the label re-evaluates when the @Observable store changes, at least on
-        // each 60 s poll, so a stale transition can appear up to 60 s late.
-        let now = Date()
+        // The store clock ticks every 30 s, so stale markers age without a new snapshot.
+        let now = store.clock
         HStack(spacing: 4) {
             Image(systemName: "gauge.with.dots.needle.33percent")
             if let labelText = labelText(now: now) {
@@ -95,19 +106,17 @@ private struct MenuBarContentView: View {
     @State private var invalidOrigin = false
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            VStack(alignment: .leading, spacing: 10) {
-                headerSection
-                sourceControlsSection
-                statusSection(now: context.date)
-                Divider()
-                accountsSection(now: context.date)
-                Divider()
-                footerActionsSection
-            }
-            .padding(12)
-            .frame(minWidth: 360, idealWidth: 390, maxWidth: 440)
+        VStack(alignment: .leading, spacing: 10) {
+            headerSection
+            sourceControlsSection
+            statusSection(now: store.clock)
+            Divider()
+            accountsSection(now: store.clock)
+            Divider()
+            footerActionsSection
         }
+        .padding(12)
+        .frame(minWidth: 360, idealWidth: 390, maxWidth: 440)
         .onAppear {
             tailscaleDraft = store.tailscaleOriginInput
         }
