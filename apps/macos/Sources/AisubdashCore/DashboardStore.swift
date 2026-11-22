@@ -221,14 +221,43 @@ public final class DashboardStore {
         return saved + accounts.filter { rank[$0.id] == nil }
     }
 
+    /// Moves a visible account onto another visible one: directly after the target when it
+    /// was before it, otherwise directly before it. Every other saved or current entry,
+    /// hidden or absent, keeps its relative order.
     @discardableResult
     public func moveAccount(_ providerID: String, onto targetID: String) -> Bool {
-        false
+        let visibleIDs = Set(visibleAccounts.map(\.id))
+        guard let origin = currentEndpoint?.origin.absoluteString,
+              providerID != targetID,
+              visibleIDs.contains(providerID),
+              visibleIDs.contains(targetID)
+        else {
+            return false
+        }
+        // Stored IDs (including absent ones) first, then current IDs not yet stored.
+        var seen = Set<String>()
+        var order = (accountOrder + (dashboard?.accounts.map(\.id) ?? [])).filter { seen.insert($0).inserted }
+        guard let from = order.firstIndex(of: providerID),
+              let to = order.firstIndex(of: targetID)
+        else {
+            return false
+        }
+        order.remove(at: from)
+        let target = order.firstIndex(of: targetID)!
+        order.insert(providerID, at: from < to ? target + 1 : target)
+        accountOrder = order
+        preferences.orderByOrigin[origin] = order
+        return true
     }
 
+    /// Moves a visible account past its nearest visible neighbour in `direction`.
     @discardableResult
     public func moveAccount(_ providerID: String, _ direction: AccountMoveDirection) -> Bool {
-        false
+        let visibleIDs = visibleAccounts.map(\.id)
+        guard let index = visibleIDs.firstIndex(of: providerID) else { return false }
+        let neighbour = direction == .up ? index - 1 : index + 1
+        guard visibleIDs.indices.contains(neighbour) else { return false }
+        return moveAccount(providerID, onto: visibleIDs[neighbour])
     }
 
     public var visibleAccounts: [UsageAccount] {
