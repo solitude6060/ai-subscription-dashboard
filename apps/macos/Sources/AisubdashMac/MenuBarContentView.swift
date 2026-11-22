@@ -41,6 +41,8 @@ struct MenuBarContentView: View {
                 .accessibilityHidden(true)
         }
         .onDisappear { showingSettings = false }
+        .onChange(of: tailscaleDraft) { invalidOrigin = false }
+        .onChange(of: store.selectedSource) { invalidOrigin = false }
         .task { await store.reload() }
     }
 
@@ -143,7 +145,7 @@ struct MenuBarContentView: View {
                         }
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("\(hiddenCount) Hidden Providers. Open Settings")
+                    .accessibilityLabel(ProviderCountFormatter.hiddenSettingsLabel(hiddenCount))
                 }
             }
 
@@ -153,13 +155,25 @@ struct MenuBarContentView: View {
                         Text("\(nearLimitCount) near limit")
                             .fontWeight(.medium)
                             .fixedSize()
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
                     if let requestStatusText {
-                        Text(requestStatusText)
-                            .foregroundStyle(statusColor)
+                        if store.status == .idle {
+                            Label {
+                                Text(requestStatusText)
+                            } icon: {
+                                Image(systemName: "clock.badge.exclamationmark")
+                                    .foregroundStyle(.orange)
+                                    .accessibilityHidden(true)
+                            }
+                            .foregroundStyle(.primary)
+                        } else {
+                            Text(requestStatusText)
+                                .foregroundStyle(statusColor)
+                        }
                     }
                 }
+                .multilineTextAlignment(nearLimitCount > 0 ? .trailing : .leading)
                 .accessibilityElement(children: .combine)
             }
 
@@ -207,7 +221,7 @@ struct MenuBarContentView: View {
                 }
             } else if !accounts.isEmpty {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(accounts) { account in
                             AccountCardView(
                                 account: account,
@@ -223,7 +237,7 @@ struct MenuBarContentView: View {
                 .frame(maxHeight: 470)
             } else if hiddenCount > 0 {
                 ContentUnavailableView {
-                    Label("All \(hiddenCount) providers hidden", systemImage: "eye.slash")
+                    Label(ProviderCountFormatter.allHidden(hiddenCount), systemImage: "eye.slash")
                 } actions: {
                     HStack {
                         Button("Open Settings", action: openSettings)
@@ -232,6 +246,8 @@ struct MenuBarContentView: View {
                         }
                     }
                 }
+            } else if store.isBusy && store.dashboard == nil {
+                ProgressView("Loading usage…")
             } else {
                 ContentUnavailableView(
                     "No Usage Data",
@@ -355,9 +371,7 @@ struct MenuBarContentView: View {
 
     private var statusColor: Color {
         switch store.status {
-        case .idle:
-            return store.isUsingCachedFallback ? .orange : .secondary
-        case .loading, .refreshingLocal:
+        case .idle, .loading, .refreshingLocal:
             return .secondary
         case .failed:
             return .red

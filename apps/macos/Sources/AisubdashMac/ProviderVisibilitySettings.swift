@@ -29,7 +29,7 @@ struct ProviderVisibilitySettings: View {
     private func providerList(_ accounts: [UsageAccount]) -> some View {
         let ordered = accounts.filter { !$0.quotas.isEmpty } + accounts.filter { $0.quotas.isEmpty }
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(ordered) { account in
                     providerRow(account)
                 }
@@ -52,10 +52,10 @@ struct ProviderVisibilitySettings: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .toggleStyle(.switch)
-            .accessibilityLabel(account.name)
-            .accessibilityHint(subtitle)
+            .accessibilityLabel("\(account.name), \(subtitle)")
 
             if store.pinnedProviderID == account.id, let quotaID = store.pinnedQuotaID {
                 HStack(spacing: 6) {
@@ -73,7 +73,7 @@ struct ProviderVisibilitySettings: View {
         if quotaCount == 0 {
             return account.refreshFailed ? "Refresh failed" : "No data"
         }
-        let quotas = "\(quotaCount) quotas"
+        let quotas = ProviderCountFormatter.quotas(quotaCount)
         return account.refreshFailed ? "\(quotas) · Refresh failed" : quotas
     }
 }

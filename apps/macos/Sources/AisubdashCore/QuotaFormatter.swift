@@ -30,7 +30,8 @@ public enum QuotaFormatter {
         guard let resetsAt else { return nil }
         let seconds = resetsAt.timeIntervalSince(now)
         guard seconds > 0 else { return "Reset due" }
-        return "in \(shortDuration(seconds))"
+        let prefix = spoken ? "Resets in" : "in"
+        return "\(prefix) \(shortDuration(seconds))"
     }
 
     public static func readingAge(_ observedAt: Date?, now: Date) -> String {

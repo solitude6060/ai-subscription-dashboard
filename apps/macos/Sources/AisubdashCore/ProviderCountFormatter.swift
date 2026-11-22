@@ -1,13 +1,14 @@
 public enum ProviderCountFormatter {
     public static func quotas(_ count: Int) -> String {
-        "\(count) quotas"
+        count == 1 ? "1 quota" : "\(count) quotas"
     }
 
     public static func allHidden(_ count: Int) -> String {
-        "All \(count) providers hidden"
+        count == 1 ? "1 provider hidden" : "All \(count) providers hidden"
     }
 
     public static func hiddenSettingsLabel(_ count: Int) -> String {
-        "\(count) Hidden Providers. Open Settings"
+        let providers = count == 1 ? "1 Hidden Provider" : "\(count) Hidden Providers"
+        return "\(providers). Open Settings"
     }
 }

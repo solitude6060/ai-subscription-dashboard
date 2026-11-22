@@ -53,3 +53,36 @@ window is hidden. [AppKit window occlusion notification](https://developer.apple
 ## Open Plan Questions
 
 None.
+
+## Review remediation
+
+[Implementation review](../reviews/2026-11-22-macos-menu-bar-uiux-impl-review.md)
+
+| Finding | Change | Test | Files in `apps/macos` |
+| --- | --- | --- | --- |
+| 1. High — Switch alignment | Give the toggle label a full-width leading frame to align the switches at the trailing edge. | SwiftUI layout only. No unit test. Check switches with short and long provider names in the macOS panel. | `Sources/AisubdashMac/ProviderVisibilitySettings.swift` |
+| 2. Medium — Provider state in VoiceOver | Include the provider name and state in the toggle's accessibility label and remove the state hint. | SwiftUI accessibility wiring. Check the toggle with VoiceOver hints disabled. | `Sources/AisubdashMac/ProviderVisibilitySettings.swift` |
+| 3. Medium — Stale Tailscale validation error | Clear the panel's validation error when the draft or the selected source changes. | SwiftUI state wiring. Submit an invalid address, then verify that editing the draft clears the error. Repeat and switch sources to check that the error clears on return. | `Sources/AisubdashMac/MenuBarContentView.swift` |
+| 4. Medium — Cached status appearance and alignment | Use an orange clock warning icon and primary text for `Stale (cached)`. Align status text to the leading edge when it stands alone and to the trailing edge when the near-limit count is present. | SwiftUI layout only. No unit test. Check lone status messages and wrapped status with a near-limit count. | `Sources/AisubdashMac/MenuBarContentView.swift` |
+| 5. Medium — Capped list measurement | Use `VStack` inside both capped scroll views so the content size includes all rows. | SwiftUI layout only. No unit test. Open each list with a short provider list and with enough rows to scroll. | `Sources/AisubdashMac/MenuBarContentView.swift`, `Sources/AisubdashMac/ProviderVisibilitySettings.swift` |
+| 6. Low — Initial loading state | Show `Loading usage…` in the list area while a request is active and the dashboard is absent. | SwiftUI presentation only. No unit test. Check the panel during the first load of a configured source. | `Sources/AisubdashMac/MenuBarContentView.swift` |
+| 7. Low — Singular count wording | Format quota subtitles, the all-hidden message, and the hidden settings button's VoiceOver label using singular wording for a count of one. | `ProviderCountFormatterTests` covers counts of one and two for all three strings. | `Sources/AisubdashCore/ProviderCountFormatter.swift`, `Sources/AisubdashMac/ProviderVisibilitySettings.swift`, `Sources/AisubdashMac/MenuBarContentView.swift`, `Tests/AisubdashCoreTests/ProviderCountFormatterTests.swift` |
+| 8. Low — Spoken reset countdown | Prefix the future countdown with `Resets` in the quota row's VoiceOver label. | `QuotaFormatterTests.testSpokenResetCountdownDescribesFutureReset` covers future, sub-minute, due, past, and missing reset times. The existing visual countdown assertions remain in place. | `Sources/AisubdashCore/QuotaFormatter.swift`, `Sources/AisubdashMac/AccountCardView.swift`, `Tests/AisubdashCoreTests/QuotaFormatterTests.swift` |
+
+The four new test methods were committed before the fixes in `1e7fdad`. The focused
+test command at that step and the full `swift test --package-path apps/macos` after
+implementation both exited 1 during manifest compilation. XCTest ran no assertions
+in either attempt. The suite has 43 declared test methods, including the existing 39.
+
+`build-app.sh` exited 1 with the same manifest diagnostics. `codesign --verify --strict`
+exited 1 with `No such file or directory` for `apps/macos/.build/app/aisubdash.app`.
+
+```text
+<unknown>:0: error: error opening '/Users/cyma/.cache/clang/ModuleCache/Swift-18Y2CYADWFGX0.swiftmodule' for output: /Users/cyma/.cache/clang/ModuleCache: Operation not permitted
+<unknown>:0: error: unable to load standard library for target 'arm64-apple-macosx14.0'
+```
+
+Swift syntax parsing and `git diff --check` exited 0. The source scan for
+`TimelineView`, `DisclosureGroup`, and `LazyVStack` found only the existing comment
+at `Sources/AisubdashMac/AisubdashMenuBarApp.swift:59`. The panel and VoiceOver
+checks are pending a successful macOS build.

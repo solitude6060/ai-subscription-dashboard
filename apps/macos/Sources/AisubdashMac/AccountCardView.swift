@@ -89,7 +89,8 @@ private struct QuotaRowView: View {
         let level = QuotaFormatter.usageLevel(quota)
         let value = QuotaFormatter.compactValue(quota)
         let countdown = QuotaFormatter.resetCountdown(quota.resetsAt, now: now)
-        let spokenDetails: [String?] = [quota.label, value, levelDescription(level), countdown]
+        let spokenCountdown = QuotaFormatter.resetCountdown(quota.resetsAt, now: now, spoken: true)
+        let spokenDetails: [String?] = [quota.label, value, levelDescription(level), spokenCountdown]
         VStack(spacing: 4) {
             HStack(spacing: 6) {
                 HStack(spacing: 6) {
