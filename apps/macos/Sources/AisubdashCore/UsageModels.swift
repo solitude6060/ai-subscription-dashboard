@@ -108,7 +108,11 @@ enum UsageContractDecoder {
             let refreshFailed = hasLastError(in: obj)
 
             let snapshot = snapshotsByProviderId[providerId]
-            let observedAt = snapshot.flatMap { parseISO8601($0["startedAt"]) }
+            // Some collectors (MiniMax) set startedAt to the quota window start, so a
+            // successful refresh dates the reading. A failed refresh keeps the snapshot time.
+            let snapshotTime = snapshot.flatMap { parseISO8601($0["startedAt"]) }
+            let refreshTime = refreshFailed ? nil : parseISO8601(obj["lastRefreshAt"])
+            let observedAt = snapshotTime.map { max($0, refreshTime ?? $0) }
             let quotas = snapshot.map { decodeQuotas(from: $0, providerId: providerId) } ?? []
 
             accounts.append(
