@@ -134,6 +134,78 @@ final class DashboardOrderTests: XCTestCase {
         XCTAssertEqual(store.hiddenAccountCount, 2)
     }
 
+    func testOrderPersistsPerSourceAndResetOnlyClearsTheSelectedSource() async {
+        let suiteName = "DashboardOrderTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let first = makeStore(preferences: UserDefaultsDashboardPreferences(userDefaults: defaults))
+        await first.reload()
+        XCTAssertFalse(first.hasCustomOrder)
+        XCTAssertTrue(first.moveAccount("c", onto: "a"))
+        XCTAssertTrue(first.hasCustomOrder)
+        first.setAccountVisibility(true, providerID: "manual")
+        first.selectSource(.tailscale)
+        XCTAssertTrue(first.updateTailscaleOrigin(origin))
+        await first.reload()
+        XCTAssertFalse(first.hasCustomOrder)
+        XCTAssertTrue(first.moveAccount("b", .up))
+
+        let restored = makeStore(preferences: UserDefaultsDashboardPreferences(userDefaults: defaults))
+        await restored.reload()
+        XCTAssertTrue(restored.hasCustomOrder)
+        XCTAssertEqual(restored.visibleAccounts.map(\.id), ["b", "a", "c"])
+
+        restored.resetAccountOrder()
+        XCTAssertFalse(restored.hasCustomOrder)
+        XCTAssertEqual(restored.visibleAccounts.map(\.id), ["a", "b", "c"])
+
+        restored.selectSource(.local)
+        await restored.reload()
+        XCTAssertTrue(restored.hasCustomOrder)
+        XCTAssertEqual(restored.orderedAccounts.map(\.id), ["c", "a", "manual", "b"])
+
+        restored.resetVisibilityOverrides()
+        XCTAssertTrue(restored.hasCustomOrder)
+        XCTAssertEqual(restored.orderedAccounts.map(\.id), ["c", "a", "manual", "b"])
+        XCTAssertEqual(restored.visibleAccounts.map(\.id), ["c", "a", "b"])
+    }
+
+    func testResetOrderLeavesVisibilityOverrides() async {
+        let preferences = InMemoryDashboardPreferences()
+        let store = makeStore(preferences: preferences)
+        await store.reload()
+        store.setAccountVisibility(false, providerID: "a")
+        XCTAssertTrue(store.moveAccount("c", onto: "b"))
+
+        store.resetAccountOrder()
+
+        XCTAssertFalse(store.hasCustomOrder)
+        XCTAssertNil(preferences.orderByOrigin[local])
+        XCTAssertTrue(store.hasVisibilityOverrides)
+        XCTAssertEqual(preferences.visibilityOverridesByOrigin[local], ["a": false])
+        XCTAssertEqual(store.visibleAccounts.map(\.id), ["b", "c"])
+    }
+
+    func testChangingTailscaleOriginKeepsThePreviousOriginsOrder() async {
+        let store = makeStore(preferences: InMemoryDashboardPreferences(
+            selectedSource: .tailscale,
+            tailscaleOriginInput: origin
+        ))
+        await store.reload()
+        XCTAssertTrue(store.moveAccount("a", .down))
+
+        XCTAssertTrue(store.updateTailscaleOrigin("https://other.tailnet.ts.net"))
+        await store.reload()
+        XCTAssertFalse(store.hasCustomOrder)
+        XCTAssertEqual(store.visibleAccounts.map(\.id), ["a", "b", "c"])
+
+        XCTAssertTrue(store.updateTailscaleOrigin(origin))
+        await store.reload()
+        XCTAssertTrue(store.hasCustomOrder)
+        XCTAssertEqual(store.visibleAccounts.map(\.id), ["b", "a", "c"])
+    }
+
     private func makeStore(preferences: DashboardPreferences = InMemoryDashboardPreferences()) -> DashboardStore {
         func quota(_ provider: String) -> UsageQuota {
             UsageQuota(

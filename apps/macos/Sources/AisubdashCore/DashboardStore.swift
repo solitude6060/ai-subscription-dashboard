@@ -296,6 +296,8 @@ public final class DashboardStore {
         preferences.visibilityOverridesByOrigin.removeValue(forKey: origin)
     }
 
+    public func resetAccountOrder() {}
+
     public func reload() async {
         guard inFlightPostGeneration != generation,
               inFlightGetGeneration != generation
