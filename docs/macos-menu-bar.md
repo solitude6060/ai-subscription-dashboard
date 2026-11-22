@@ -72,3 +72,6 @@ The Bun endpoints used by the client are `/api/providers` and
 `/api/usage/latest-snapshots`. With This Mac selected, Fetch Provider Usage also uses
 `POST /api/providers/refresh`.
 [Native client plan and iOS roadmap](plans/2026-11-22-macos-menu-bar.md)
+
+For the first physical Mac acceptance pass, follow the
+[Mac verification handover](handovers/2026-11-22-macos-owner-verification.md).
