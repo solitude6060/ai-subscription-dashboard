@@ -25,6 +25,7 @@ public protocol DashboardPreferences: AnyObject {
     var tailscaleOriginInput: String { get set }
     var pinsByOrigin: [String: String] { get set }
     var visibilityOverridesByOrigin: [String: [String: Bool]] { get set }
+    var orderByOrigin: [String: [String]] { get set }
 }
 
 public final class UserDefaultsDashboardPreferences: DashboardPreferences {
@@ -33,6 +34,7 @@ public final class UserDefaultsDashboardPreferences: DashboardPreferences {
         static let tailscaleOriginInput = "aisubdash.tailscaleOriginInput"
         static let pinsByOrigin = "aisubdash.pinsByOrigin"
         static let visibilityOverridesByOrigin = "aisubdash.visibilityOverridesByOrigin"
+        static let orderByOrigin = "aisubdash.orderByOrigin"
     }
 
     private let userDefaults: UserDefaults
@@ -69,6 +71,11 @@ public final class UserDefaultsDashboardPreferences: DashboardPreferences {
         get { userDefaults.dictionary(forKey: Keys.visibilityOverridesByOrigin) as? [String: [String: Bool]] ?? [:] }
         set { userDefaults.set(newValue, forKey: Keys.visibilityOverridesByOrigin) }
     }
+
+    public var orderByOrigin: [String: [String]] {
+        get { userDefaults.dictionary(forKey: Keys.orderByOrigin) as? [String: [String]] ?? [:] }
+        set { userDefaults.set(newValue, forKey: Keys.orderByOrigin) }
+    }
 }
 
 public final class InMemoryDashboardPreferences: DashboardPreferences {
@@ -76,17 +83,20 @@ public final class InMemoryDashboardPreferences: DashboardPreferences {
     public var tailscaleOriginInput: String
     public var pinsByOrigin: [String: String]
     public var visibilityOverridesByOrigin: [String: [String: Bool]]
+    public var orderByOrigin: [String: [String]]
 
     public init(
         selectedSource: UsageSourceKind = .local,
         tailscaleOriginInput: String = "",
         pinsByOrigin: [String: String] = [:],
-        visibilityOverridesByOrigin: [String: [String: Bool]] = [:]
+        visibilityOverridesByOrigin: [String: [String: Bool]] = [:],
+        orderByOrigin: [String: [String]] = [:]
     ) {
         self.selectedSource = selectedSource
         self.tailscaleOriginInput = tailscaleOriginInput
         self.pinsByOrigin = pinsByOrigin
         self.visibilityOverridesByOrigin = visibilityOverridesByOrigin
+        self.orderByOrigin = orderByOrigin
     }
 }
 
@@ -193,6 +203,10 @@ public final class DashboardStore {
         guard let endpoint = currentEndpoint else { return }
         pinnedQuotaID = pinnedQuotaID == quotaID ? nil : quotaID
         preferences.pinsByOrigin[endpoint.origin.absoluteString] = pinnedQuotaID
+    }
+
+    public var orderedAccounts: [UsageAccount] {
+        dashboard?.accounts ?? []
     }
 
     public var visibleAccounts: [UsageAccount] {
