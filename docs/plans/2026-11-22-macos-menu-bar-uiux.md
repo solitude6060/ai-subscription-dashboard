@@ -31,63 +31,102 @@ Owner requests from the 2026-11-22 Mac verification:
 ### Layout: flat, scannable list
 
 - Remove account expansion. Every account shows a header line and all of its quotas.
-- Account header: provider name (`.body`, semibold), then badges for Stale and Refresh
-  failed, then the reading age right-aligned (`5m ago`, `.caption`, secondary).
-- Quota row, one line each: label (`.callout`), a thin bar, the value right-aligned
-  (`.callout`, semibold, monospaced digits), the time until reset (`in 3h 12m`, `.caption`,
-  secondary), and the pin button. The absolute reset time moves to the row's help tooltip.
-- Usage colour on the bar and value: below 70% the accent colour, 70% to below 90% orange,
-  90% and above red. The thresholds are constants in `AisubdashCore`.
-- Accounts without quotas show one secondary line, "No quota reported".
+- Account grouping: each account is a card, `.primary.opacity(0.05)` fill with a hairline
+  border, 8 pt inner padding, 10 pt between accounts, 6 pt between quota rows.
+- Account header: provider name (`.body`, semibold, `.lineLimit(1)`, lowest layout
+  priority), badges, and the reading age right-aligned (`.caption`, secondary). Badges use
+  `.caption` with an icon and text: Stale (`clock.badge.exclamationmark`), Refresh failed
+  (`exclamationmark.triangle`). Both may appear together.
+- Quota row, two lines. Line 1: label (`.callout`, `.lineLimit(1)`), reset countdown
+  (`.subheadline`, secondary), `compactValue` (`82%`, `.callout`, semibold, monospaced
+  digits, minimum width so values align), pin button. Line 2: a full-width 5 pt bar.
+- Usage level from the fraction `used / limit` clamped to 0...1: normal below 0.70,
+  warning from 0.70, critical from 0.90. The bar is tinted (accent, orange, red). The value
+  text stays `.primary`; warning and critical add `exclamationmark.triangle.fill` or
+  `exclamationmark.octagon.fill` before the value. Colour is never the only cue.
+- Reset countdown: `in <1m`, `in 45m`, `in 3h 12m`, `in 3h` (zero minutes omitted),
+  `in 2d 4h`, and `Reset due` in orange with an icon when the reset time has passed. No
+  reset time: the slot is empty. Reading age: `<1m ago`, `5m ago`, `3h 12m ago`,
+  `2d 4h ago`; no observation time: `No reading time`.
+- Tooltips: the absolute reset time on the countdown only; `Pin to menu bar` or `Unpin`
+  on the pin button.
+- Pin button: 22 x 22 pt hit target; unpinned icon at `.tertiary`, pinned icon in the accent colour.
+- Accounts without quotas but shown by override: one secondary line, `No quota reported`.
+- Near-limit summary: when any visible quota is critical, the status line shows
+  `N near limit`.
 - Sorting: accounts keep the server order. A user-chosen order is out of scope.
-- Panel width 400 pt fixed; the list scrolls above 520 pt height.
+- Panel width 400 pt fixed. The account list is a `ScrollView` with `maxHeight: 470`; the
+  whole panel stays within about 580 pt.
+- No fixed row heights, so text can grow without clipping.
 
 ### Header and source
 
-- Top row: app name, source segmented control (This Mac, Tailscale), a gear button that
-  opens settings, and the busy indicator.
+- Top row: app name, source segmented control (This Mac, Tailscale), a fixed 16 pt slot
+  for the busy indicator so controls do not move during background reloads, and a gear
+  button (`⌘,`) that opens settings.
 - The Tailscale origin field moves from the main panel into settings. When the Tailscale
-  source has no valid origin, the list area shows "Set the Tailscale address in Settings"
-  with a button that opens settings.
-- The status line keeps the source summary, request status, refresh warning and the
-  missing-pin note, in `.caption` with standard (not secondary) foreground for warnings.
-- Footer: Reload, Fetch Provider Usage (This Mac only), Open Dashboard, Quit, unchanged in behavior.
+  source has no valid origin, the list area shows `Set the Tailscale address in Settings`
+  with an Open Settings button, and the red request status for that case is suppressed.
+- Status line: source summary with the Tailscale host middle-truncated, the request status
+  only when it is not idle, `N hidden` as a borderless button with a chevron that opens
+  settings, `N near limit`, the refresh warning and the missing-pin note. Warnings use
+  standard foreground with an icon.
+- When providers are loaded but every account is hidden: `All N providers hidden` with
+  Open Settings, plus Fetch Usage on This Mac.
+- Footer, one row within the 376 pt inner width: an icon-only Reload button with help
+  text, `Fetch Usage` (This Mac only), `Dashboard`, `Quit`. Accessibility labels keep the
+  full action names. Behavior is unchanged.
 
 ### Settings section
 
-- Opened from the gear button inside the same panel (the panel switches between the list
-  and settings; a back button returns). No separate window.
+- Opened from the gear button inside the same panel; the panel switches between the list
+  and settings. Closing and reopening the panel returns to the list.
+- Settings header stays visible: Back, `Settings`, the source control and the busy or
+  error status (needed after Apply).
 - Contents: the Tailscale origin field with Apply (moved, behavior unchanged) and, for the
-  selected source, one toggle per provider account in the loaded dashboard: "Show".
+  selected source, the provider list in a `ScrollView` (`maxHeight: 470`). Without a loaded
+  dashboard it shows `Connect a source to manage providers`.
+- One switch-style toggle per enabled provider account; the provider name is the toggle
+  label and a `.caption` subtitle shows its state: `N quotas`, `No data`, `Refresh failed`,
+  or `N quotas · Refresh failed`. Providers with quotas are listed before those without.
+- The provider that owns the pinned quota shows a `Pinned` badge and an Unpin button.
 - Default visibility follows the data: an account is shown when its decoded `quotas` is
   non-empty, and hidden otherwise. On 2026-11-22 the This Mac source listed 20 enabled
   providers, of which 3 had quota lines (16 reported `lastError`, `manual` had no snapshot);
   the tailnet source listed 8, of which 7 had quota lines.
-- Each settings toggle shows the effective state. Changing it stores an explicit override
-  for that provider and source; an override wins over the data rule. A "Reset to automatic"
-  button clears the overrides of the selected source.
+- Each toggle shows the effective state. Changing it stores an explicit override for that
+  provider and source; an override wins over the data rule. `Reset to automatic` clears the
+  overrides of the selected source and is disabled when there are none.
 - Overrides are stored per source endpoint, mirroring `pinsByOrigin`: a new
   `DashboardPreferences.visibilityOverridesByOrigin: [String: [String: Bool]]` keyed by the
   same origin string, inner keys are provider IDs (`providerId`, including account suffixes),
-  `true` shows and `false` hides.
-- Settings list every enabled provider of the loaded dashboard, including hidden ones, each
-  with a short state: quota count, "No data", or "Refresh failed".
+  `true` shows and `false` hides. Changing the Tailscale origin keeps the overrides of the
+  previous origin (unlike the current pin behavior, which is review finding 4 of the
+  owner-Mac review and stays out of scope here).
 - Hidden accounts are removed from the list only; they are still loaded. Hiding the
   provider of the pinned quota keeps the pin and the menu bar value.
-- An account shown by override without quotas displays "No quota reported" and its badges.
 - A provider ID that no longer appears in the dashboard keeps its stored override.
-- The status line shows "N hidden" when accounts are hidden, which opens settings.
+
+### Accessibility
+
+- Each quota row is one combined element (label, value, level, reset countdown); the pin
+  button is a separate control with its action as the label.
+- The custom bar is hidden from VoiceOver because the combined row carries the value.
+- Gear, Back, `N hidden`, Unpin and the icon-only Reload button have explicit labels.
+- Account headers keep the combined label with badges and reading age (PR #69 fix `8d9bab7`).
 
 ## Tests (Red then Green, `AisubdashCore`)
 
-- `QuotaFormatter` (moved to `AisubdashCore` so it is testable): time until reset
-  (`in 45m`, `in 3h 12m`, `in 2d 4h`, `Reset due` when past), usage fraction clamped to 0...1,
-  usage level from the thresholds (69.9 normal, 70 warning, 90 critical).
+- `QuotaFormatter` (moved to `AisubdashCore` so it is testable): reset countdown and
+  reading age for every case in the layout section; usage fraction clamped to 0...1; usage
+  level from the fraction (0.699 normal, 0.70 warning, 0.90 critical), including `count`
+  and `usd` quotas and a zero limit.
 - `DashboardStore.visibleAccounts`: accounts with quotas shown and accounts without quotas
   hidden by default; an override `true` shows an account without quotas and `false` hides
   one with quotas; overrides match the exact provider ID; overrides are per source and
   survive a new store instance with the same preferences; reset clears only the selected
-  source; hiding does not clear the pin; `hiddenAccountCount` matches the filter.
+  source; changing the Tailscale origin keeps the previous origin's overrides; hiding does
+  not clear the pin; `hiddenAccountCount` and `nearLimitCount` match the visible list.
 - Existing 25 tests stay green.
 
 View code has no unit tests (XCTest has no `MenuBarExtra` panel). The owner checks the
