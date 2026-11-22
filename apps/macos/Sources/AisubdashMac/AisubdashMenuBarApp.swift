@@ -333,8 +333,35 @@ private struct AccountRowView: View {
     @Binding var isExpanded: Bool
     let onTogglePin: (String) -> Void
 
+    // DisclosureGroup does not expand inside a .window MenuBarExtra on macOS 27.2.1;
+    // a plain button toggling the same binding does (owner-Mac review, finding 12).
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 12, height: 16)
+                        .foregroundStyle(.secondary)
+                    header
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(account.name), \(isExpanded ? "collapse" : "expand")")
+
+            if isExpanded {
+                details
+                    .padding(.leading, 18)
+            }
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var details: some View {
             VStack(alignment: .leading, spacing: 8) {
                 if account.quotas.isEmpty {
                     Text("No quota data reported.")
@@ -352,7 +379,9 @@ private struct AccountRowView: View {
                 }
             }
             .padding(.top, 6)
-        } label: {
+    }
+
+    private var header: some View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(account.name)
@@ -386,9 +415,6 @@ private struct AccountRowView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-        }
-        .padding(8)
-        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
