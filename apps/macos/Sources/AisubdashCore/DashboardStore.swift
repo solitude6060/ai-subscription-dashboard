@@ -24,6 +24,7 @@ public protocol DashboardPreferences: AnyObject {
     var selectedSource: UsageSourceKind { get set }
     var tailscaleOriginInput: String { get set }
     var pinsByOrigin: [String: String] { get set }
+    var visibilityOverridesByOrigin: [String: [String: Bool]] { get set }
 }
 
 public final class UserDefaultsDashboardPreferences: DashboardPreferences {
@@ -32,6 +33,8 @@ public final class UserDefaultsDashboardPreferences: DashboardPreferences {
         static let tailscaleOriginInput = "aisubdash.tailscaleOriginInput"
         static let pinsByOrigin = "aisubdash.pinsByOrigin"
     }
+
+    public var visibilityOverridesByOrigin: [String: [String: Bool]] { get { [:] } set {} }
 
     private let userDefaults: UserDefaults
 
@@ -68,6 +71,7 @@ public final class InMemoryDashboardPreferences: DashboardPreferences {
     public var selectedSource: UsageSourceKind
     public var tailscaleOriginInput: String
     public var pinsByOrigin: [String: String]
+    public var visibilityOverridesByOrigin: [String: [String: Bool]] = [:]
 
     public init(
         selectedSource: UsageSourceKind = .local,
@@ -180,6 +184,16 @@ public final class DashboardStore {
         pinnedQuotaID = pinnedQuotaID == quotaID ? nil : quotaID
         preferences.pinsByOrigin[endpoint.origin.absoluteString] = pinnedQuotaID
     }
+
+    public var visibleAccounts: [UsageAccount] { dashboard?.accounts ?? [] }
+    public var hiddenAccountCount: Int { 0 }
+    public var nearLimitCount: Int { 0 }
+    public var hasVisibilityOverrides: Bool { false }
+    public var pinnedProviderID: String? { nil }
+
+    public func setAccountVisibility(_ isVisible: Bool, providerID: String) {}
+
+    public func resetVisibilityOverrides() {}
 
     public func reload() async {
         guard inFlightPostGeneration != generation,

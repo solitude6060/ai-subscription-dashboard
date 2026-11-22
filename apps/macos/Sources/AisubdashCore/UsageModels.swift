@@ -14,6 +14,8 @@ public struct UsageQuota: Hashable, Sendable, Identifiable {
     public let format: UsageQuotaFormat
     public let resetsAt: Date?
 
+    public static func providerID(fromID id: String) -> String? { nil }
+
     public init(
         id: String,
         label: String,
