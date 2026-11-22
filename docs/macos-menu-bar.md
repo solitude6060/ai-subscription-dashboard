@@ -22,8 +22,8 @@ it in System Settings under General → Login Items.
 
 | Source | Setup | Updates |
 | --- | --- | --- |
-| **Tailscale** | Connect Tailscale on your Mac. Enter the origin of the existing Web backend and save it. For the direct port, use `http://100.x.y.z:6736` with your server's actual Tailscale IPv4 address. For Tailscale Serve, use your private `https://machine.tailnet.ts.net` origin, including its port if needed. | Reload reads the server's saved snapshots. Open Dashboard to run a provider refresh there. |
-| **This Mac** | Install Bun and run the commands below on the Mac, in your own account. Keep the server process running while you use this source. | Fetch Provider Usage asks the loopback Bun server to update its enabled providers. Reload reads saved snapshots. |
+| **Tailscale** | Connect Tailscale on your Mac. Open **Settings** in the panel, enter the address of the existing Web backend, and select **Apply**. For the direct port, use `http://100.x.y.z:6736` with your server's actual Tailscale IPv4 address. For Tailscale Serve, use your private `https://machine.tailnet.ts.net` origin, including its port if needed. | Reload reads the server's saved snapshots. Select **Dashboard** to run a provider refresh there. |
+| **This Mac** | Install Bun and run the commands below on the Mac, in your own account. Keep the server process running while you use this source. | **Fetch Usage** asks the local Bun server to update its enabled providers. Reload reads saved snapshots. |
 
 A Tailscale URL contains only a scheme, address and optional port. Direct HTTP
 supports Tailscale's IPv4 range. Connect through your trusted tailnet and use its
@@ -40,7 +40,7 @@ bun run build:webui
 OPENUSAGE_WEBUI_HOST=127.0.0.1 OPENUSAGE_WEBUI_PORT=6736 bun run start:webui
 ```
 
-The Web build enables **Open Dashboard** for provider setup. The Mac's server stores
+The Web build enables **Dashboard** for provider setup. The Mac's server stores
 its own database and reads the existing CLI credentials available to its collectors.
 Use Provider Accounts in the Web dashboard to configure additional supported CLI homes.
 Some provider credentials stored exclusively in macOS Keychain may be unavailable.
@@ -51,12 +51,30 @@ rotate credentials following the existing collector rules.
 
 ## Read The Menu
 
-Select one quota to pin it in the menu bar. The expanded panel shows the observation
-time and the provider's reported reset time when available. Separate accounts
-keep their own quota rows. A used quota of zero remains a reading. An unavailable
-quota is labeled separately. The app shows the last successful reading in memory if
-a connection fails, and marks old readings or readings past their reset time.
-The selected source, endpoint and pin preference survive app restarts.
+The panel shows each visible provider account and all its quotas. Each quota shows
+usage and a reset countdown when available. Hover over the countdown for the exact
+reset time. The account header shows how long ago the reading was taken and marks
+stale readings or refresh failures. If a connection fails, the panel can still show
+the last successful reading from this app session.
+
+Select the pin next to a quota to show its value in the menu bar. Hiding that
+provider keeps the pin active. To remove it, select **Unpin** next to the quota or
+in **Settings**. If the pinned quota is missing, the usage panel also offers
+**Unpin** next to the warning. Your selected source, Tailscale address, and pin
+preference are saved across app restarts.
+
+## Choose Which Providers Appear
+
+Select the gear, press **Command–Comma**, or select the hidden provider count to
+open **Settings**. Choose **This Mac** or **Tailscale** to manage that source.
+Providers with reported quotas appear automatically, including quotas with zero
+usage. Use the switches to show a provider with no reported quota or hide a
+provider you do not want in the usage list.
+
+**Reset to automatic** restores the default for the selected source. The app
+remembers visibility choices separately for This Mac and for each Tailscale
+address, including after an app restart. Select **Back** to return to the usage
+list. Closing the panel also returns it to the usage list when you reopen it.
 
 ## Verify A Connection
 
@@ -69,7 +87,7 @@ These commands print counts of enabled providers and quota rows.
 ```
 
 The Bun endpoints used by the client are `/api/providers` and
-`/api/usage/latest-snapshots`. With This Mac selected, Fetch Provider Usage also uses
+`/api/usage/latest-snapshots`. With This Mac selected, **Fetch Usage** also uses
 `POST /api/providers/refresh`.
 [Native client plan and iOS roadmap](plans/2026-11-22-macos-menu-bar.md)
 

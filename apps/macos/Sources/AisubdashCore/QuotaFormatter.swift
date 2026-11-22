@@ -22,36 +22,8 @@ public enum QuotaFormatter {
         }
     }
 
-    public static func detailedValue(_ quota: UsageQuota) -> String {
-        switch quota.format {
-        case .percent:
-            return "\(formatNumber(quota.used))% used"
-        case .usd:
-            return String(format: "$%.2f / $%.2f", quota.used, quota.limit)
-        case .count(let suffix):
-            let base = "\(formatNumber(quota.used)) / \(formatNumber(quota.limit))"
-            if let suffix, !suffix.isEmpty {
-                return "\(base) \(suffix)"
-            }
-            return base
-        }
-    }
-
     public static func absoluteTimestamp(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
-    }
-
-    public static func relativeAge(from earlier: Date, to now: Date) -> String {
-        let elapsed = max(0, Int(now.timeIntervalSince(earlier)))
-        if elapsed < 60 {
-            return "\(elapsed)s ago"
-        }
-        let minutes = elapsed / 60
-        if minutes < 60 {
-            return "\(minutes)m ago"
-        }
-        let hours = minutes / 60
-        return "\(hours)h \(minutes % 60)m ago"
     }
 
     public static func resetCountdown(_ resetsAt: Date?, now: Date) -> String? {
