@@ -101,3 +101,25 @@ because the `ScrollView` reports almost no ideal height in the panel. The card s
 height is now measured with `onGeometryChange` and the scroll area is sized to
 `min(measured, visible screen height - 200 pt)`, so cards that fit show without
 scrolling. 43 tests pass; build and codesign pass. Owner panel check pending.
+
+## Drag to reorder
+
+Plan: `docs/plans/2026-11-22-macos-menu-bar-reorder.md` (review record with APPROVE:
+`docs/reviews/2026-11-22-macos-menu-bar-reorder-plan-review.md`). Routing: the planned
+implementer Codex `gpt-6.2-sol` (high) had exhausted its quota and no second Codex home
+exists on this Mac, so the registry's Codex quota fallback applied: Claude Opus 5.5
+(medium). Each test commit failed on XCTest assertions before its implementation commit.
+
+| Group | Change | Tests (`Tests/AisubdashCoreTests/DashboardOrderTests.swift`) | Files in `apps/macos` | Commits |
+| --- | --- | --- | --- | --- |
+| Saved order | `orderByOrigin` preference (key `aisubdash.orderByOrigin`), loaded per origin with pins and overrides. `orderedAccounts`: saved IDs in saved order, then the rest in server order. `visibleAccounts` filters it. | Server order without a saved order; saved order applied, unknown IDs ignored and kept in storage, new accounts appended. | `Sources/AisubdashCore/DashboardStore.swift` | Test `5501aeb`, implementation `b0f815f` |
+| Moves | `moveAccount(_:onto:)` on the merged working list (stored IDs, deduplicated, then current IDs not stored); `AccountMoveDirection` and `moveAccount(_:_:)` past the nearest visible neighbour. | Down and up drops; hidden account between keeps its place; absent saved ID survives; unknown, hidden, equal and quota IDs rejected without saving; direction skips hidden neighbours, false at the ends and for hidden or unknown IDs; no endpoint; pin and visibility unchanged. | `Sources/AisubdashCore/DashboardStore.swift` | Test `4d0b06b`, implementation `5293f7e` |
+| Per-source order and reset | `hasCustomOrder`, `resetAccountOrder()` for the selected origin only. | Order per origin and across a new store; reset clears only the selected origin and leaves overrides; visibility reset leaves the order; Tailscale origin change keeps the previous order; `hasCustomOrder` per origin. | `Sources/AisubdashCore/DashboardStore.swift` | Test `f702c63`, implementation `65a0b04` |
+| Panel and settings | Drag handle (two or more visible cards), `.draggable` with a name preview, card `.dropDestination(for: String.self)` with an accent `strokeBorder` while targeted, VoiceOver Move Up/Move Down on the header element, `Reset Order` in settings, user guide section. | No unit test: XCTest cannot host the panel. Owner check on the Mac. | `Sources/AisubdashMac/AccountCardView.swift`, `Sources/AisubdashMac/MenuBarContentView.swift`, `Sources/AisubdashMac/ProviderVisibilitySettings.swift`, `docs/macos-menu-bar.md` | `a54efd0` |
+
+`swift test --package-path apps/macos`: 56 tests, 0 failures (43 existing plus 13 new).
+`build-app.sh "$HOME/Applications/aisubdash-reorder-r1"` built and signed the arm64 app;
+`codesign --verify --strict` exited 0. The source scan for `TimelineView`,
+`DisclosureGroup` and `LazyVStack` found only the comment at
+`Sources/AisubdashMac/AisubdashMenuBarApp.swift:59`. The account list height logic in
+`MenuBarContentView.swift` is unchanged. Owner panel checks are pending.
