@@ -38,6 +38,16 @@ if [[ ! -x "$BIN_PATH" ]]; then
   exit 1
 fi
 
+# macOS selects SwiftUI and AppKit behaviour from the SDK version recorded in the
+# executable. With an older recorded SDK the open menu bar panel never shrinks.
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+[[ "$SDK_VERSION" == *.* ]] || SDK_VERSION="$SDK_VERSION.0"
+RECORDED_SDK="$(otool -l "$BIN_PATH" | awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "sdk" { print $2; exit }')"
+if [[ "$RECORDED_SDK" != "$SDK_VERSION" ]]; then
+  echo "Error: executable records SDK '$RECORDED_SDK', expected the build SDK $SDK_VERSION." >&2
+  exit 1
+fi
+
 STAGE_DIR="$(mktemp -d "$OUTPUT_DIR/.aisubdash-stage.XXXXXX")"
 cleanup() {
   rm -rf "$STAGE_DIR"
