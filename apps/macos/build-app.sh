@@ -23,15 +23,23 @@ if [[ -e "$APP_BUNDLE" || -L "$APP_BUNDLE" ]]; then
 fi
 
 ARCH="$(uname -m)"
-swift build \
-  --package-path "$SCRIPT_DIR" \
-  -c release \
-  --arch "$ARCH" \
-  --product AisubdashMac
-
-BIN_DIR="$(swift build --package-path "$SCRIPT_DIR" -c release --arch "$ARCH" --product AisubdashMac --show-bin-path)"
-BIN_PATH="$BIN_DIR/AisubdashMac"
 PLIST_PATH="$SCRIPT_DIR/Info.plist"
+MIN_OS_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST_PATH")"
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+[[ "$SDK_VERSION" == *.* ]] || SDK_VERSION="$SDK_VERSION.0"
+
+# SwiftPM can record the deployment target as the SDK version, so state both to the linker.
+BUILD_ARGS=(
+  --package-path "$SCRIPT_DIR"
+  -c release
+  --arch "$ARCH"
+  --product AisubdashMac
+  -Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_OS_VERSION" -Xlinker "$SDK_VERSION"
+)
+swift build "${BUILD_ARGS[@]}"
+
+BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
+BIN_PATH="$BIN_DIR/AisubdashMac"
 
 if [[ ! -x "$BIN_PATH" ]]; then
   echo "Error: built executable not found at $BIN_PATH" >&2
@@ -40,8 +48,6 @@ fi
 
 # macOS selects SwiftUI and AppKit behaviour from the SDK version recorded in the
 # executable. With an older recorded SDK the open menu bar panel never shrinks.
-SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
-[[ "$SDK_VERSION" == *.* ]] || SDK_VERSION="$SDK_VERSION.0"
 RECORDED_SDK="$(otool -l "$BIN_PATH" | awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "sdk" { print $2; exit }')"
 if [[ "$RECORDED_SDK" != "$SDK_VERSION" ]]; then
   echo "Error: executable records SDK '$RECORDED_SDK', expected the build SDK $SDK_VERSION." >&2
