@@ -123,3 +123,40 @@ exists on this Mac, so the registry's Codex quota fallback applied: Claude Opus 
 `DisclosureGroup` and `LazyVStack` found only the comment at
 `Sources/AisubdashMac/AisubdashMenuBarApp.swift:59`. The account list height logic in
 `MenuBarContentView.swift` is unchanged. Owner panel checks are pending.
+
+Owner check of drag to reorder on build `aisubdash-reorder-r3` (HEAD `b89e8af`),
+2026-11-23: dragging works.
+
+## Panel window does not shrink after a source switch
+
+Owner report (2026-11-22): with Tailscale selected, choosing This Mac leaves the panel
+content in the middle of the screen.
+
+Observation, from window-frame logging in a temporary build (not committed): the panel
+window grew from 535 pt to 977 pt when the list went from 4 to 8 cards and stayed at
+977 pt after the list returned to 4 cards. No resize notification followed a decrease
+in content height. The content is centred in the taller window.
+
+| Check (temporary builds, owner opened the panel, heights logged) | Result |
+| --- | --- |
+| Minimal apps `M` (list sized to content), `N` (fixed 600 pt), `O` (list and `ContentUnavailableView`), owner visual check | No displacement reported |
+| `.fixedSize(horizontal: false, vertical: true)` on the account section, then on the panel in place of `.frame(maxHeight:)` | Window still does not shrink |
+| Minimal app `Q`, seven variants (root `fixedSize`, `NSViewRepresentable` background, segmented picker and shortcut button, dividers and `layoutPriority`, asynchronous status row, all combined) | Window shrinks in all seven (for example 650 pt to 178 pt) |
+| App with the panel content reduced in nine steps, from a list of plain boxes to the full panel | Window shrinks in none |
+| App with a static menu bar label and a list of plain boxes driven by a local flag | Window does not shrink |
+| `otool -l`: `Q` built with `swiftc` records `minos 27.2`, `sdk 27.2`; the app built with SwiftPM records `minos 14.0`, `sdk 14.0` (debug and release) | Difference found |
+| The same app executable with only the recorded SDK changed to 27.2 (`vtool -set-build-version macos 14.0 27.2`), re-signed | Window shrinks in all five logged cases (844 pt to 444 pt) |
+
+Cause: the executable records SDK 14.0. On macOS 27.2.1 the `MenuBarExtra(.window)`
+panel of such an executable keeps its largest height. Why SwiftPM (Swift 6.4.2,
+`swiftbuild` engine) records the deployment target as the SDK version is not determined;
+`swiftc` with the same `-target arm64-apple-macos14.0` and `-sdk` flags records 27.2.
+
+| Change | Check | File | Commits |
+| --- | --- | --- | --- |
+| `build-app.sh` passes `-Xlinker -platform_version -Xlinker macos -Xlinker <LSMinimumSystemVersion> -Xlinker <xcrun SDK version>` and exits 1 when the recorded SDK differs from the build SDK. | The check alone fails with `executable records SDK '14.0', expected the build SDK 27.2`; with the linker flags the script passes and `otool` shows `sdk 27.2`. | `apps/macos/build-app.sh` | Test `713bc3a`, fix `866fba3` |
+
+No Swift source changed. `swift test`: 56 tests, 0 failures; `codesign --verify --strict`
+passes on `~/Applications/aisubdash-sdkfix-r1`. Not verified: the linker flag on the CI
+runner (`macos-15`), which uses a different toolchain; the script's SDK check runs there.
+Owner check of `aisubdash-sdkfix-r1` is pending.
