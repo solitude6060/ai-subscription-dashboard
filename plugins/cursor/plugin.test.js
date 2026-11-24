@@ -237,18 +237,36 @@ describe("cursor plugin", () => {
       expect(ctx.host.http.request).not.toHaveBeenCalled()
     })
 
-    it("does not read the CLI auth file for a pinned home", async () => {
+    it.each([
+      ["refresh-only", { refreshToken: "cli-refresh" }],
+      ["encrypted access token", { accessToken: ENCRYPTED, refreshToken: ENCRYPTED }],
+    ])("ignores a CLI auth file without a usable access token (%s)", async (_name, auth) => {
       const ctx = makeCtx()
-      ctx.host.env.get.mockImplementation((name) =>
-        name === "OPENUSAGE_CURSOR_CONFIG_DIR" ? "/tmp/cursor-work" : null
-      )
       encryptedSqlite(ctx)
-      seedCliAuth(ctx, makeJwt({ exp: 9999999999, sub: "google-oauth2|user_cli" }))
+      ctx.host.fs.writeText(CLI_AUTH, JSON.stringify(auth))
 
       const plugin = await loadPlugin()
       expect(() => plugin.probe(ctx)).toThrow("Cursor app sign-in is encrypted")
       expect(ctx.host.http.request).not.toHaveBeenCalled()
     })
+
+    it.each(["OPENUSAGE_CURSOR_CONFIG_DIR", "OPENUSAGE_CURSOR_STATE_DB"])(
+      "does not read the CLI auth file for a home pinned by %s",
+      async (pinVar) => {
+        const ctx = makeCtx()
+        ctx.host.env.get.mockImplementation((name) => (name === pinVar ? "/tmp/cursor-work" : null))
+        encryptedSqlite(ctx)
+        seedCliAuth(ctx, makeJwt({ exp: 9999999999, sub: "google-oauth2|user_cli" }))
+        const exists = vi.spyOn(ctx.host.fs, "exists")
+        const readText = vi.spyOn(ctx.host.fs, "readText")
+
+        const plugin = await loadPlugin()
+        expect(() => plugin.probe(ctx)).toThrow("Cursor app sign-in is encrypted")
+        expect(ctx.host.http.request).not.toHaveBeenCalled()
+        expect(exists).not.toHaveBeenCalledWith(CLI_AUTH)
+        expect(readText).not.toHaveBeenCalledWith(CLI_AUTH)
+      }
+    )
   })
 
   it("refreshes keychain access token and persists to keychain source", async () => {
