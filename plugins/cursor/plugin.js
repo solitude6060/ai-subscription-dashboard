@@ -5,6 +5,10 @@
   ]
   const KEYCHAIN_ACCESS_TOKEN_SERVICE = "cursor-access-token"
   const KEYCHAIN_REFRESH_TOKEN_SERVICE = "cursor-refresh-token"
+  // ponytail: default CLI config dir only; honor XDG_CONFIG_HOME if a second CLI account needs tracking.
+  const CLI_AUTH_FILE = "~/.config/cursor/auth.json"
+  // Cursor app 3.31+ encrypts state.vscdb auth values with the OS keyring; the plugin cannot read them.
+  const ENCRYPTED_PREFIX = "cursor-safe-storage:"
   const BASE_URL = "https://api2.cursor.sh"
   const USAGE_URL = BASE_URL + "/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
   const PLAN_URL = BASE_URL + "/aiserver.v1.DashboardService/GetPlanInfo"
@@ -16,6 +20,7 @@
   const CLIENT_ID = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"
   const REFRESH_BUFFER_MS = 5 * 60 * 1000 // refresh 5 minutes before expiration
   const LOGIN_HINT = "Sign in via Cursor app or run `agent login`."
+  const ENCRYPTED_HINT = "Cursor app sign-in is encrypted and cannot be read. Run `agent login` (default account only)."
   const EVENTS_PAGE_SIZE = 200
   const EVENTS_MAX_PAGES = 10
   const MODEL_BREAKDOWN_LIMIT = 5
@@ -93,12 +98,22 @@
     )
   }
 
+  function isEncrypted(value) {
+    return typeof value === "string" && value.indexOf(ENCRYPTED_PREFIX) === 0
+  }
+
   function resolveSqliteDb(ctx) {
     const candidates = stateDbCandidates(ctx)
+    let encrypted = false
     for (let i = 0; i < candidates.length; i++) {
       const dbPath = candidates[i]
       const accessToken = readStateValueFrom(ctx, dbPath, "cursorAuth/accessToken")
       const refreshToken = readStateValueFrom(ctx, dbPath, "cursorAuth/refreshToken")
+      if (isEncrypted(accessToken) || isEncrypted(refreshToken)) {
+        ctx.host.log.warn("sqlite auth is encrypted by the Cursor app, skipping " + dbPath)
+        encrypted = true
+        continue
+      }
       if (accessToken || refreshToken) {
         return {
           dbPath: dbPath,
@@ -107,7 +122,25 @@
         }
       }
     }
-    return null
+    return encrypted ? { dbPath: null, accessToken: null, refreshToken: null, encrypted: true } : null
+  }
+
+  // Cursor CLI on Linux keeps its session here (macOS uses the keychain services above).
+  function readCliAuth(ctx) {
+    if (!ctx.host.fs.exists(CLI_AUTH_FILE)) return null
+    try {
+      const parsed = ctx.util.tryParseJson(ctx.host.fs.readText(CLI_AUTH_FILE))
+      const accessToken = parsed && typeof parsed.accessToken === "string" ? parsed.accessToken.trim() : ""
+      const refreshToken = parsed && typeof parsed.refreshToken === "string" ? parsed.refreshToken.trim() : ""
+      if (!accessToken && !refreshToken) {
+        ctx.host.log.warn("cursor cli auth file has no tokens: " + CLI_AUTH_FILE)
+        return null
+      }
+      return { accessToken: accessToken || null, refreshToken: refreshToken || null }
+    } catch (e) {
+      ctx.host.log.warn("cursor cli auth read failed: " + String(e))
+      return null
+    }
   }
 
   function readKeychainValue(ctx, service) {
@@ -193,11 +226,22 @@
       }
     }
 
+    const cliAuth = pinnedHome ? null : readCliAuth(ctx)
+    if (cliAuth) {
+      return {
+        accessToken: cliAuth.accessToken,
+        refreshToken: cliAuth.refreshToken,
+        source: "cli",
+        sqliteDbPath: null,
+      }
+    }
+
     return {
       accessToken: null,
       refreshToken: null,
       source: null,
       sqliteDbPath: null,
+      encrypted: !!(sqliteAuth && sqliteAuth.encrypted),
     }
   }
 
@@ -239,6 +283,11 @@
   function refreshToken(ctx, refreshTokenValue, source, sqliteDbPath) {
     if (!refreshTokenValue) {
       ctx.host.log.warn("refresh skipped: no refresh token")
+      return null
+    }
+    // The CLI owns its session file; refreshing here could rotate it and sign `agent` out.
+    if (source === "cli") {
+      ctx.host.log.warn("refresh skipped: Cursor CLI token is read-only")
       return null
     }
 
@@ -794,7 +843,8 @@
     const sqliteDbPath = authState.sqliteDbPath
 
     if (!accessToken && !refreshTokenValue) {
-      ctx.host.log.error("probe failed: no access or refresh token in sqlite/keychain")
+      ctx.host.log.error("probe failed: no access or refresh token in sqlite/keychain/cli")
+      if (authState.encrypted) throw ENCRYPTED_HINT
       throw "Not logged in. " + LOGIN_HINT
     }
 
