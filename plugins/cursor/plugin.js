@@ -126,17 +126,18 @@
   }
 
   // Cursor CLI on Linux keeps its session here (macOS uses the keychain services above).
+  // Only the access token is taken: the CLI owns its session file, and refreshing it here
+  // could rotate the session and sign `agent` out.
   function readCliAuth(ctx) {
     if (!ctx.host.fs.exists(CLI_AUTH_FILE)) return null
     try {
       const parsed = ctx.util.tryParseJson(ctx.host.fs.readText(CLI_AUTH_FILE))
       const accessToken = parsed && typeof parsed.accessToken === "string" ? parsed.accessToken.trim() : ""
-      const refreshToken = parsed && typeof parsed.refreshToken === "string" ? parsed.refreshToken.trim() : ""
-      if (!accessToken && !refreshToken) {
-        ctx.host.log.warn("cursor cli auth file has no tokens: " + CLI_AUTH_FILE)
+      if (!accessToken || isEncrypted(accessToken)) {
+        ctx.host.log.warn("cursor cli auth file has no usable access token: " + CLI_AUTH_FILE)
         return null
       }
-      return { accessToken: accessToken || null, refreshToken: refreshToken || null }
+      return { accessToken: accessToken, refreshToken: null }
     } catch (e) {
       ctx.host.log.warn("cursor cli auth read failed: " + String(e))
       return null
@@ -283,11 +284,6 @@
   function refreshToken(ctx, refreshTokenValue, source, sqliteDbPath) {
     if (!refreshTokenValue) {
       ctx.host.log.warn("refresh skipped: no refresh token")
-      return null
-    }
-    // The CLI owns its session file; refreshing here could rotate it and sign `agent` out.
-    if (source === "cli") {
-      ctx.host.log.warn("refresh skipped: Cursor CLI token is read-only")
       return null
     }
 
