@@ -230,7 +230,7 @@ OpenUsage reads Cursor CLI tokens from keychain:
 
 #### 3) Cursor CLI auth file (Linux fallback)
 
-On Linux the Cursor CLI keeps its sign-in in `~/.config/cursor/auth.json` (`accessToken`, `refreshToken`). OpenUsage reads this file only. It does not refresh this token or write the file; the CLI renews its own session when you use it. When the token expires, run `agent` once or `agent login` again.
+On Linux the Cursor CLI keeps its sign-in in `~/.config/cursor/auth.json` (`accessToken`, `refreshToken`). OpenUsage reads only the access token from this file. It does not refresh this token or write the file; the CLI renews its own session when you use it. When the token expires, run `agent` once or `agent login` again.
 
 To initialize CLI auth:
 
@@ -240,7 +240,7 @@ agent login
 
 ### Multi-account homes (WebUI)
 
-Settings → Provider Accounts can track more than one Cursor config. Detect looks for signed-in `state.vscdb` under `~/.config/Cursor` and macOS Application Support. Each enabled account is probed with `OPENUSAGE_CURSOR_CONFIG_DIR` set to that config root (optional power-user override: `OPENUSAGE_CURSOR_STATE_DB` for a full `state.vscdb` path). When either env is set, the plugin uses that home only and skips the global keychain and CLI auth file fallbacks so accounts do not bleed together. A pinned home whose database is encrypted cannot be read.
+Settings → Provider Accounts can track more than one Cursor config. Detect lists each `~/.config/Cursor` or macOS Application Support config that has a `state.vscdb` file; it does not check that the file holds a readable sign-in. Each enabled account is probed with `OPENUSAGE_CURSOR_CONFIG_DIR` set to that config root (optional power-user override: `OPENUSAGE_CURSOR_STATE_DB` for a full `state.vscdb` path). When either env is set, the plugin uses that home only and skips the global keychain and CLI auth file fallbacks so accounts do not bleed together. A pinned home whose database is encrypted cannot be read.
 
 ### Token Refresh
 
