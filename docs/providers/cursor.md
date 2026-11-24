@@ -190,10 +190,13 @@ OpenUsage reads Cursor auth in this order:
 
 1. **Cursor Desktop SQLite** (preferred)
 2. **Cursor CLI keychain** (fallback)
+3. **Cursor CLI auth file** (Linux fallback)
 
 #### 1) Cursor Desktop SQLite (preferred)
 
 Tried in order; first database that has an access or refresh token wins. Refreshed tokens are written back to that same database.
+
+Cursor app 3.31 and later can store these values encrypted (`cursor-safe-storage:v1:...`). OpenUsage cannot read encrypted values, skips that database and uses the next source. If no other source has a token, the card shows `Cursor app sign-in is encrypted` and asks for `agent login`.
 
 | Platform | Path |
 |---|---|
@@ -225,6 +228,10 @@ OpenUsage reads Cursor CLI tokens from keychain:
 - `cursor-access-token`
 - `cursor-refresh-token`
 
+#### 3) Cursor CLI auth file (Linux fallback)
+
+On Linux the Cursor CLI keeps its sign-in in `~/.config/cursor/auth.json` (`accessToken`, `refreshToken`). OpenUsage reads this file only. It does not refresh this token or write the file; the CLI renews its own session when you use it. When the token expires, run `agent` once or `agent login` again.
+
 To initialize CLI auth:
 
 ```bash
@@ -233,11 +240,11 @@ agent login
 
 ### Multi-account homes (WebUI)
 
-Settings → Provider Accounts can track more than one Cursor config. Detect looks for signed-in `state.vscdb` under `~/.config/Cursor` and macOS Application Support. Each enabled account is probed with `OPENUSAGE_CURSOR_CONFIG_DIR` set to that config root (optional power-user override: `OPENUSAGE_CURSOR_STATE_DB` for a full `state.vscdb` path). When either env is set, the plugin uses that home only and skips the global keychain fallback so accounts do not bleed together.
+Settings → Provider Accounts can track more than one Cursor config. Detect looks for signed-in `state.vscdb` under `~/.config/Cursor` and macOS Application Support. Each enabled account is probed with `OPENUSAGE_CURSOR_CONFIG_DIR` set to that config root (optional power-user override: `OPENUSAGE_CURSOR_STATE_DB` for a full `state.vscdb` path). When either env is set, the plugin uses that home only and skips the global keychain and CLI auth file fallbacks so accounts do not bleed together. A pinned home whose database is encrypted cannot be read.
 
 ### Token Refresh
 
-Access tokens are short-lived JWTs. The app refreshes before each request if expired, then persists the new access token back to the same source it was loaded from (SQLite or keychain).
+Access tokens are short-lived JWTs. The app refreshes before each request if expired, then persists the new access token back to the same source it was loaded from (SQLite or keychain). Tokens from the CLI auth file are never refreshed or written.
 
 ```
 POST https://api2.cursor.sh/oauth/token
