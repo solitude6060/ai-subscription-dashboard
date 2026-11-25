@@ -159,4 +159,7 @@ panel of such an executable keeps its largest height. Why SwiftPM (Swift 6.4.2,
 No Swift source changed. `swift test`: 56 tests, 0 failures; `codesign --verify --strict`
 passes on `~/Applications/aisubdash-sdkfix-r1`. Not verified: the linker flag on the CI
 runner (`macos-15`), which uses a different toolchain; the script's SDK check runs there.
-Owner check of `aisubdash-sdkfix-r1` is pending.
+Owner check of `aisubdash-sdkfix-r1` (2026-11-25): the owner was asked to switch between
+Tailscale and This Mac, open the settings page and drag to reorder, and reported the build
+as working. Not reported on: order persistence across a restart, Reset Order, VoiceOver
+Move Up/Down.
