@@ -33,16 +33,25 @@ function isRunning(pid: number): boolean {
   }
 }
 
-async function stopFixture(pidPath: string): Promise<void> {
+// A missing, empty or partly written pid file yields null: pid 0 would address this process group.
+async function readPid(pidPath: string): Promise<number | null> {
   const file = Bun.file(pidPath);
-  if (!(await file.exists())) return;
-  const pid = Number(await file.text());
-  if (!isRunning(pid)) return;
+  if (!(await file.exists())) return null;
+  const pid = Number((await file.text()).trim());
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
 
-  process.kill(pid, "SIGKILL");
+async function stopFixture(pidPath: string): Promise<void> {
+  const pid = await readPid(pidPath);
+  if (pid === null || !isRunning(pid)) return;
+
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
   const stopBy = performance.now() + runnerDeadlineMs;
-  while (isRunning(pid)) {
-    expect(performance.now()).toBeLessThan(stopBy);
+  while (isRunning(pid) && performance.now() < stopBy) {
     await Bun.sleep(25);
   }
 }
@@ -222,7 +231,9 @@ describe("ColabProvider", () => {
         stdout: "",
         stderr: `${process.execPath} command timed out`,
       });
-      expect(isRunning(Number(await Bun.file(pidPath).text()))).toBe(false);
+      const pid = await readPid(pidPath);
+      expect(pid).not.toBeNull();
+      expect(isRunning(pid!)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -242,7 +253,9 @@ describe("ColabProvider", () => {
         stdout: "",
         stderr: `${process.execPath} command timed out`,
       });
-      expect(isRunning(Number(await Bun.file(pidPath).text()))).toBe(false);
+      const pid = await readPid(pidPath);
+      expect(pid).not.toBeNull();
+      expect(isRunning(pid!)).toBe(false);
     } finally {
       await stopFixture(pidPath);
       rmSync(dir, { recursive: true, force: true });

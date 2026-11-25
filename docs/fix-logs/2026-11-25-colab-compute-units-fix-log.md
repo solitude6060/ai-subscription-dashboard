@@ -18,3 +18,17 @@ rerun by the orchestrator: Colab and ccusage tests 45 pass, 2 skip, 0 fail;
 
 Deferred (C7 to C11): see the review record. Not verified: a refresh against the real CLI on
 the owner's Linux host.
+
+## Remediation re-review (2026-11-25)
+
+Target `6112248..1c77abf`. Lane 1 (Grok Build `grok-4.7`, xhigh): APPROVE, no findings. Lane 2
+(AGY `gemini-4-neon-high`, high): APPROVE, 1 LOW. Lane 3 (Codex `gpt-6.2-sol`, high):
+REQUEST_CHANGES, 2 MEDIUM. Transcripts: `reviews/colab-triple-r2/` in the sibling artifacts
+directory.
+
+| Finding | Source | Verified | Repair |
+| --- | --- | --- | --- |
+| The test cleanup parses the pid file with `Number()`; an empty or partly written file gives 0, and `process.kill(0, "SIGKILL")` addresses the test runner's process group. `SIGKILL` to a process that has just exited throws `ESRCH` from `finally`. | Sol (MEDIUM), Neon (LOW) | Yes, `colab-provider.test.ts:39-42` | `readPid` returns a positive integer or null; the tests assert a pid was recorded; `ESRCH` on the kill is ignored. Test-only change, no red phase. |
+| The lingering-output test polls with signal 0, which also succeeds for a zombie that its adoptive parent has not reaped. | Sol (MEDIUM) | By reading; not reproduced on macOS | Partly: the cleanup loop stops waiting at its deadline without failing. The assertion that the fixture is gone stays, so the test still depends on the system reaping orphans. Recorded as a limit. |
+
+After the repair: Colab and ccusage tests 45 pass, 2 skip, 0 fail.
