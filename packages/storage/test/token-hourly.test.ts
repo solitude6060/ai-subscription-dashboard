@@ -102,6 +102,93 @@ describe("token_hourly storage", () => {
   });
 });
 
+describe("token_hourly rows of a replaced day", () => {
+  const hourlyRows = (path: string) => {
+    const db = new Database(path, { readonly: true });
+    const rows = db.query("SELECT provider_id, tool, hour_start, model, total_tokens FROM token_hourly ORDER BY provider_id, tool, hour_start, model").all();
+    db.close();
+    return rows;
+  };
+
+  test.each([
+    ["cursor", "Cursor Usage Event", "api"],
+    ["grok", "Grok Session", "local-log"],
+  ] as const)("a replaced %s day loses an hourly model the batch no longer has", async (providerId, tool, source) => {
+    const path = join(dataDir, "replace.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-16T00:00:00.000Z";
+    await storage.upsertUsageRecords([
+      daily({ id: "d-old", providerId, tool, source, startedAt: day, model: "helios-alpha", totalTokens: 9 }),
+      hourly({ id: "h-old", providerId, tool, source, startedAt: day, model: "helios-alpha", totalTokens: 9 }),
+    ], { replaceScopes: true });
+    await storage.upsertUsageRecords([
+      daily({ id: "d-new", providerId, tool, source, startedAt: day, model: "Other", totalTokens: 9 }),
+      hourly({ id: "h-new", providerId, tool, source, startedAt: day, model: "Other", totalTokens: 9 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toEqual([
+      { provider_id: providerId, tool, hour_start: day, model: "Other", total_tokens: 9 },
+    ]);
+  });
+
+  test("keeps hourly rows of a day the batch does not replace", async () => {
+    const path = join(dataDir, "other-day.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const source = "api";
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-15", providerId: "cursor", tool, source, startedAt: "2026-11-15T23:00:00.000Z", totalTokens: 5 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7 }),
+      hourly({ id: "h-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toEqual([
+      { provider_id: "cursor", tool, hour_start: "2026-11-15T23:00:00.000Z", model: "model", total_tokens: 5 },
+      { provider_id: "cursor", tool, hour_start: "2026-11-16T00:00:00.000Z", model: "model", total_tokens: 7 },
+    ]);
+  });
+
+  test("keeps hourly rows when the batch has hourly rows but no daily row for that day", async () => {
+    const path = join(dataDir, "no-daily.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-05", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T05:00:00.000Z", totalTokens: 5 }),
+    ]);
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-09", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T09:00:00.000Z", totalTokens: 9 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(2);
+  });
+
+  test("keeps ccusage hourly rows when its daily scope is replaced", async () => {
+    const path = join(dataDir, "ccusage.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-16T00:00:00.000Z";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-cc", providerId: "claude-code", tool: "ccusage", source: "local-log", startedAt: "2026-11-16T03:00:00.000Z", model: "All Models", totalTokens: 30 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-cc", providerId: "claude-code", tool: "ccusage", source: "local-log", startedAt: day, totalTokens: 40 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toEqual([
+      { provider_id: "claude-code", tool: "ccusage", hour_start: "2026-11-16T03:00:00.000Z", model: "All Models", total_tokens: 30 },
+    ]);
+  });
+});
+
 describe("listAllowanceTokenRows", () => {
   const FROM = "2026-10-01T00:00:00.000Z";
 
