@@ -31,14 +31,17 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-function stubServer(databasePath: string, refreshStatus = 200, refreshBody: unknown = { ok: true, results: [{ providerId: "cursor", ok: true, records: 3 }] }) {
+function stubServer(databasePath: string, refreshStatus = 200, refreshBody: unknown = { ok: true, results: [{ providerId: "cursor", ok: true, records: 3 }] }, healthDelayMs = 0) {
   const posts: string[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       const url = new URL(request.url);
-      if (url.pathname === "/api/health") return Response.json({ ok: true, databasePath });
+      if (url.pathname === "/api/health") {
+        if (healthDelayMs) await Bun.sleep(healthDelayMs);
+        return Response.json({ ok: true, databasePath });
+      }
       if (request.method === "POST" && url.pathname === "/api/providers/refresh") {
         posts.push(url.pathname);
         if (refreshStatus !== 200) return new Response("boom", { status: refreshStatus });
@@ -155,6 +158,19 @@ describe("status:refresh beside a running WebUI server", () => {
       const { output, exitCode } = await runRefresh(server.port);
       expect(posts).toEqual(["/api/providers/refresh"]);
       expect(exitCode).not.toBe(0);
+      expect(output).not.toContain("Refreshing providers...");
+    } finally {
+      server.stop(true);
+    }
+  }, 30_000);
+
+  test("fails without a local write when the server does not answer the health probe in time", async () => {
+    const { server, posts } = stubServer(join(home, "data", "openusage.sqlite"), 200, undefined, 3000);
+    try {
+      const { output, stderr, exitCode } = await runRefresh(server.port);
+      expect(exitCode).not.toBe(0);
+      expect(posts).toEqual([]);
+      expect(stderr).toContain("did not answer");
       expect(output).not.toContain("Refreshing providers...");
     } finally {
       server.stop(true);

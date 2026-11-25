@@ -2805,4 +2805,16 @@ describe("cursor usage event ranges", () => {
 
     expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
   })
+
+  it("marks the sample incomplete when a page contains a non-object entry", async () => {
+    const { ctx } = setup(() => ({
+      status: 200,
+      bodyText: JSON.stringify({ totalUsageEventsCount: 2, usageEventsDisplay: [todayEvent, null] }),
+    }))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
 })

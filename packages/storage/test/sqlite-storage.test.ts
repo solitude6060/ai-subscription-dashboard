@@ -656,12 +656,18 @@ describe("SqliteStorage write lock", () => {
         Bun.sleepSync(800);
         db.exec("COMMIT");
       `], { stdout: "pipe" });
-      const reader = holder.stdout.getReader();
-      await reader.read();
-      const second = new SqliteStorage(path);
-      await second.init();
-      second.close();
-      await holder.exited;
+      try {
+        const reader = holder.stdout.getReader();
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toContain("locked");
+        const second = new SqliteStorage(path);
+        await second.init();
+        second.close();
+        expect(await holder.exited).toBe(0);
+      } finally {
+        holder.kill();
+        await holder.exited;
+      }
     } finally {
       if (previous === undefined) delete process.env.OPENUSAGE_WEBUI_DIR;
       else process.env.OPENUSAGE_WEBUI_DIR = previous;
