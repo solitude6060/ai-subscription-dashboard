@@ -34,3 +34,22 @@ Transcripts are retained locally in the sibling artifacts directory (`reviews/co
 | C11 | Sol | LOW | `cli-status.ts:117` reads the 100 newest records, so an older snapshot can be absent from the terminal status. | Deferred: existing behaviour for every snapshot provider. Follow-up. |
 
 The repairs are re-reviewed by the three lanes.
+
+## Remediation re-reviews
+
+Findings and repairs of each round are in `docs/fix-logs/2026-11-25-colab-compute-units-fix-log.md`.
+The lanes, models and efforts are those of round 1; AGY ran without `bwrap` each time and
+`git status` was clean afterwards.
+
+| Round | Target | Lane 1 Grok | Lane 2 Neon | Lane 3 Sol |
+| --- | --- | --- | --- | --- |
+| 2 | `6112248..1c77abf` | APPROVE | APPROVE, 1 LOW | REQUEST_CHANGES, 2 MEDIUM |
+| 3 | `1c77abf..e814486` | APPROVE | APPROVE | REQUEST_CHANGES, 1 MEDIUM |
+| 4 | `1c77abf..4cb5c4a` | APPROVE | APPROVE | APPROVE, 1 LOW |
+
+Round 4 LOW (lane 3): the comment above `readPid` credits it with rejecting a partly written pid
+file; the rename in `publishPidSource` provides that. Not changed, so that the reviewed content
+of `4cb5c4a` stays as approved; follow-up. Transcripts: `reviews/colab-triple-r2/` to `-r4/`.
+
+Result: three APPROVE verdicts on `4cb5c4a`; no unresolved CRITICAL, HIGH or MEDIUM finding.
+Later commits that change only review records and fix logs keep this approval.

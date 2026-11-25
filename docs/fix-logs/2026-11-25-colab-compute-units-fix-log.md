@@ -38,3 +38,6 @@ Round 3, target `1c77abf..e814486`: lanes 1 and 2 APPROVE with no findings; lane
 parses as another process id. Repair: the fixtures write the pid to a sibling file and rename it
 into place, and `readPid` rejects values above the signed 32-bit range. Test-only change.
 Transcripts: `reviews/colab-triple-r3/`.
+
+Round 4, target `1c77abf..4cb5c4a`: three APPROVE verdicts. At `4cb5c4a`, rerun by the
+orchestrator: Colab and ccusage tests 45 pass, 2 skip, 0 fail; `bun run build:webui` passes.
