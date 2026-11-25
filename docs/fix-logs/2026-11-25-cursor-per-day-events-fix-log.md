@@ -34,9 +34,22 @@ Plan: `docs/plans/2026-11-25-cursor-per-day-events.md`. Review: `docs/reviews/20
 
 The API answers a range without events with HTTP 200 and `{}` (2026-07-20, 2026-08-17, a future day, a zero-length range; `empty-range-check.txt`). The R1-2 change in `cfbc391a` treated that body as invalid, so a today range without events would stop all older ranges. `51fcee8a` (test, red on `e58ece87`) and `c977d331` (fix) read it as an empty range. The backfill script reads it the same way; 2026-08-17 is now `skip (no token events)`.
 
+## Review Round 2 Repairs
+
+| ID | Severity | Repro | Fix | Tests | Files |
+|---|---|---|---|---|---|
+| R2-1 | MEDIUM | Page 1 total 1400 with 1000 events, page 2 500 events without a total: the plugin ended the range as complete. | `c368977f`: later pages use the first known total. | `bac3521d`. | `plugins/cursor/plugin.js`, `plugins/cursor/plugin.test.js` |
+| R2-2 | MEDIUM | `{"error": …}`, `[]` or a page-2 `{}` read as an empty range. | `c368977f`: only a zero-key plain object on page 1 is empty. | `bac3521d`. | same |
+| R2-3 | MEDIUM | After 20 s of earlier requests the events fetch could still take 15 s; the desktop host stops the probe at 30 s. | `c368977f`: events end at the earlier of 15 s after the first event request and 25 s after the probe start. | `bac3521d`. | same |
+| R2-8 | LOW | Docs omitted the no-total rule, `{}` and the hourly upsert. | `docs/providers/cursor.md`. | — | `docs/providers/cursor.md` |
+
+R2-4, R2-6 and R2-7 (backfill script) move to `docs/reviews/2026-11-25-cursor-backfill-script-review.md`. R2-5: the collector part is deferred with R1-7; the script part is in the script review.
+
+Real account after the round 2 repairs (`e2e-ranges-r2fix.txt`): 4 event requests, refresh 6.1 s; 2026-11-16..24 equal `e2e-ranges-r1fix2.txt`. Vitest 1397 passed; Bun 646 passed, 0 failed; `bun run build` and `build:webui` passed (`*-r2fix.log`).
+
 ## Deferred
 
-- R1-7 (LOW): the collector would double count events if two queries overlapped. No caller sends overlapping ranges.
+- R1-7 (LOW) and R2-5 collector part (MEDIUM): the collector filters by query start only, so overlapping queries or an event outside its query range would be counted in another day. No caller sends overlapping ranges, and every probed event was inside its range (`probe-days.txt`, `range-paging-check.txt`). The backfill script fails a day that contains an event outside it.
 - Desktop limit: with 600+ events per day (2026-10 levels) the 15 s deadline can end the fetch before the oldest ranges; those ranges are then missing from the lines, and their stored rows keep the last complete values.
 
 ## Verification
