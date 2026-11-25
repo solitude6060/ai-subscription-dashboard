@@ -168,12 +168,14 @@ enum UsageContractDecoder {
                 ?? (refreshFailed ? nil : parseISO8601(obj["lastRefreshAt"]))
             let observedAt = snapshotTime.map { max($0, successTime ?? $0) }
             let quotas = snapshot.map { decodeQuotas(from: $0, providerId: providerId) } ?? []
+            let details = snapshot.map(decodeDetails) ?? []
 
             accounts.append(
                 UsageAccount(
                     id: providerId,
                     name: name,
                     quotas: quotas,
+                    details: details,
                     observedAt: observedAt,
                     refreshFailed: refreshFailed
                 )
@@ -239,6 +241,20 @@ enum UsageContractDecoder {
             return [makeQuota(parsed, providerId: providerId, occurrences: &occurrences)]
         }
         return []
+    }
+
+    private static func decodeDetails(from snapshot: [String: JSONValue]) -> [UsageDetail] {
+        guard case .object(let raw) = snapshot["raw"], case .array(let lines) = raw["lines"] else { return [] }
+        return lines.enumerated().compactMap { index, line in
+            guard case .object(let obj) = line,
+                  nonEmptyString(obj["type"]) == "text",
+                  let label = nonEmptyString(obj["label"]),
+                  let value = nonEmptyString(obj["value"])
+            else {
+                return nil
+            }
+            return UsageDetail(id: "\(index):\(label)", label: label, value: value)
+        }
     }
 
     private struct ParsedQuota {

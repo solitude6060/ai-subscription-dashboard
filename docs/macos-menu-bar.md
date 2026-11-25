@@ -52,7 +52,9 @@ rotate credentials following the existing collector rules.
 
 ## Read The Menu
 
-The panel shows each visible provider account and all its quotas. Each quota shows
+The panel shows each visible provider account and all its quotas. Values without a
+limit, such as the Google Colab compute-unit balance, appear as text rows after the
+quotas and cannot be pinned. Each quota shows
 usage and a reset countdown when available. Dollar quotas show both the amount used
 and the limit. Hover over the countdown for the exact reset time. The account
 header shows how long ago the reading was taken and marks
@@ -84,8 +86,8 @@ choices.
 
 Select the gear, press **Command–Comma**, or select the hidden provider count to
 open **Settings**. Choose **This Mac** or **Tailscale** to manage that source.
-Providers with reported quotas appear automatically, including quotas with zero
-usage. Use the switches to show a provider with no reported quota or hide a
+Providers with reported quotas or text values appear automatically, including quotas
+with zero usage. Use the switches to show a provider with no reported quota or hide a
 provider you do not want in the usage list.
 
 **Reset to automatic** restores the default for the selected source. The app
