@@ -52,9 +52,9 @@ rotate credentials following the existing collector rules.
 
 ## Read The Menu
 
-The panel shows each visible provider account and all its quotas. Values without a
-limit, such as the Google Colab compute-unit balance, appear as text rows after the
-quotas and cannot be pinned. Each quota shows
+The panel shows each visible provider account and all its quotas. An account
+without any quota, such as Google Colab with its compute-unit balance, shows its first
+three text values instead. Text values cannot be pinned. Each quota shows
 usage and a reset countdown when available. Dollar quotas show both the amount used
 and the limit. Hover over the countdown for the exact reset time. The account
 header shows how long ago the reading was taken and marks

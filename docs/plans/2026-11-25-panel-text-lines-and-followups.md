@@ -18,10 +18,13 @@ Change:
 
 - `UsageDetail` (`id`, `label`, `value`) and `UsageAccount.details`, decoded from `raw.lines`
   entries with `type: "text"`, a non-empty `label` and a non-empty string `value`. Order follows
-  the snapshot. Other line types stay ignored.
+  the snapshot. Other line types stay ignored. Details are kept only for an account without a
+  quota, and at most the first three: on 2026-11-25 the owner's backend returned up to 12 text
+  lines for accounts that also have quotas (Cursor, Codex), and the web card summary also shows
+  three lines.
 - `DashboardStore.isAccountVisible`: the automatic default is true when the account has a quota
   or a detail.
-- `AccountCardView`: one row per detail (label left, value right) after the quota rows. "No quota
+- `AccountCardView`: one row per detail (label left, value right). "No quota
   reported" shows only when both lists are empty.
 
 Unchanged: details cannot be pinned, have no usage level and no reset time, so the menu bar

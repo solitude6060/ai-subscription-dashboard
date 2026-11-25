@@ -168,7 +168,9 @@ enum UsageContractDecoder {
                 ?? (refreshFailed ? nil : parseISO8601(obj["lastRefreshAt"]))
             let observedAt = snapshotTime.map { max($0, successTime ?? $0) }
             let quotas = snapshot.map { decodeQuotas(from: $0, providerId: providerId) } ?? []
-            let details = snapshot.map(decodeDetails) ?? []
+            // Accounts with quotas carry many secondary text lines; the compact panel shows
+            // text lines only for an account that has nothing else, three at most.
+            let details = quotas.isEmpty ? Array((snapshot.map(decodeDetails) ?? []).prefix(3)) : []
 
             accounts.append(
                 UsageAccount(
