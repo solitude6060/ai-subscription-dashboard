@@ -48,7 +48,12 @@ fi
 
 # macOS selects SwiftUI and AppKit behaviour from the SDK version recorded in the
 # executable. With an older recorded SDK the open menu bar panel never shrinks.
-RECORDED_SDK="$(otool -l "$BIN_PATH" | awk '/LC_BUILD_VERSION/ { found = 1 } found && $1 == "sdk" { print $2; exit }')"
+RECORDED_SDK="$(otool -l "$BIN_PATH" | awk '
+  $1 == "Load" && $2 == "command" { found = 0 }
+  $1 == "cmd" && $2 == "LC_BUILD_VERSION" { found = 1 }
+  found && $1 == "sdk" && sdk == "" { sdk = $2 }
+  END { if (sdk != "") print sdk }
+')"
 if [[ "$RECORDED_SDK" != "$SDK_VERSION" ]]; then
   echo "Error: executable records SDK '$RECORDED_SDK', expected the build SDK $SDK_VERSION." >&2
   exit 1
