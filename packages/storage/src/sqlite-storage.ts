@@ -18,7 +18,6 @@ import type { Storage } from "./storage";
 import { codexSessionAccountGroups } from "../../providers/src/codex-session-ownership";
 import type { QuotaLimitUnit, QuotaObservation } from "../../providers/src/quota-observations";
 import {
-  DAILY_TOKEN_TOOLS,
   TOKEN_HOURLY_SCHEMA,
   isHourlyTokenRecord,
   listAllowanceRows,
@@ -91,7 +90,10 @@ export function getConfigPath(): string {
   return join(getOpenUsageDir(), "config.json");
 }
 
-const UTC_DAY_HOURLY_TOOLS = DAILY_TOKEN_TOOLS.filter((tool) => tool !== "ccusage");
+const DAY_MS = 86_400_000;
+// Tools whose hourly rows come from complete UTC-day queries, so a replaced closed day can replace them.
+// Grok scans can skip an unreadable transcript; ccusage and Pi label local days.
+const DAY_REPLACED_HOURLY_TOOLS = ["Cursor Usage Event"];
 
 export class SqliteStorage implements Storage {
   private db: Database | null = null;
@@ -357,14 +359,19 @@ export class SqliteStorage implements Storage {
           if (scopes.has(scope)) continue;
           scopes.add(scope);
           deleteScope.run(record.providerId, record.tool, record.startedAt, record.source);
-          // A replaced UTC day also replaces its hourly rows, so an hour or model the batch no longer
-          // has does not stay in Allowance. ccusage hours pair with local days and stay upsert-only.
-          if (UTC_DAY_HOURLY_TOOLS.includes(record.tool)) {
+          // A replaced closed UTC day also replaces its hourly rows, so an hour or model the source no
+          // longer reports does not stay in Allowance. Today's rows stay upsert-only because an earlier
+          // refresh can commit after a later one.
+          const dayStart = Date.parse(record.startedAt);
+          if (
+            DAY_REPLACED_HOURLY_TOOLS.includes(record.tool) &&
+            Number.isFinite(dayStart) && dayStart % DAY_MS === 0 && dayStart + DAY_MS <= Date.now()
+          ) {
             deleteHourlyDay.run(
               record.providerId,
               record.tool,
-              record.startedAt,
-              new Date(Date.parse(record.startedAt) + 86_400_000).toISOString(),
+              new Date(dayStart).toISOString(),
+              new Date(dayStart + DAY_MS).toISOString(),
             );
           }
         }
