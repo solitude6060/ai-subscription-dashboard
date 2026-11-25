@@ -5,6 +5,25 @@ import XCTest
 final class QuotaFormatterTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func testCardValueShowsDollarLimitAndKeepsOtherFormats() {
+        XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 50, limit: 60, format: .usd)), "$50.00 / $60.00")
+        XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 82, limit: 100)), "82%")
+        XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 8, limit: 10, format: .count(suffix: "requests"))), "8/10 requests")
+    }
+
+    func testCompactValueFormatsEveryQuotaKindAndCountSuffix() {
+        let cases: [(UsageQuotaFormat, String)] = [
+            (.percent, "8%"),
+            (.usd, "$8.00"),
+            (.count(suffix: "requests"), "8/10 requests"),
+            (.count(suffix: ""), "8/10"),
+            (.count(suffix: nil), "8/10"),
+        ]
+        for (format, expected) in cases {
+            XCTAssertEqual(QuotaFormatter.compactValue(quota(used: 8, limit: 10, format: format)), expected)
+        }
+    }
+
     func testResetCountdown() {
         let cases: [(TimeInterval, String)] = [
             (1, "in <1m"),
@@ -71,5 +90,12 @@ final class QuotaFormatterTests: XCTestCase {
 
     private func quota(used: Double, limit: Double, format: UsageQuotaFormat = .percent) -> UsageQuota {
         UsageQuota(id: "5:codex2:5h:1", label: "5h", used: used, limit: limit, format: format)
+    }
+}
+
+private extension QuotaFormatter {
+    // The card currently uses the compact formatter.
+    static func cardValue(_ quota: UsageQuota) -> String {
+        compactValue(quota)
     }
 }
