@@ -649,17 +649,21 @@
     var session = buildSessionToken(ctx, accessToken)
     if (!session) {
       ctx.host.log.warn("usage events: cannot build session token")
-      return { events: [], truncated: false, incomplete: true }
+      return { events: [], truncated: false, incomplete: true, deadline: false, inconsistent: false }
     }
     var all = []
     var truncated = false
     var incomplete = false
+    var deadline = false
+    // An answer that contradicts itself (as opposed to an HTTP or network failure).
+    var inconsistent = false
     var expectedTotal = null
     for (var page = 1; page <= EVENTS_MAX_PAGES; page++) {
       var remainingMs = deadlineMs - Date.now()
       if (remainingMs <= 0) {
         ctx.host.log.warn("usage events: deadline reached")
         incomplete = true
+        deadline = true
         break
       }
       try {
@@ -682,6 +686,7 @@
         if (resp.status < 200 || resp.status >= 300) {
           ctx.host.log.warn("usage events returned status=" + resp.status)
           incomplete = true
+          if (Date.now() >= deadlineMs) deadline = true
           break
         }
         var data = ctx.util.tryParseJson(resp.bodyText)
@@ -691,14 +696,27 @@
         if (!plain || (!empty && !Array.isArray(data.usageEventsDisplay))) {
           ctx.host.log.warn("usage events: invalid response")
           incomplete = true
+          inconsistent = true
           break
         }
         var batch = empty ? [] : data.usageEventsDisplay
+        // The host stores no rows for a range whose list has a non-object entry; flag it the same way.
+        var malformed = false
+        for (var m = 0; m < batch.length; m++) {
+          if (!batch[m] || typeof batch[m] !== "object" || Array.isArray(batch[m])) malformed = true
+        }
+        if (malformed) {
+          ctx.host.log.warn("usage events: malformed entry")
+          incomplete = true
+          inconsistent = true
+          break
+        }
         var total = typeof data.totalUsageEventsCount === "number" ? data.totalUsageEventsCount : null
         // The host stores a range only with a stable total and an exact count; flag the same cases here.
         if (total != null && expectedTotal != null && total !== expectedTotal) {
           ctx.host.log.warn("usage events: total changed between pages")
           incomplete = true
+          inconsistent = true
           break
         }
         if (total != null) expectedTotal = total
@@ -706,10 +724,15 @@
         if (expectedTotal != null && all.length > expectedTotal) {
           ctx.host.log.warn("usage events: more events than the total")
           incomplete = true
+          inconsistent = true
           break
         }
         if (batch.length < EVENTS_PAGE_SIZE) {
-          if (expectedTotal != null && all.length < expectedTotal) truncated = true
+          // A short page before the known total is an inconsistent answer, not the page limit.
+          if (expectedTotal != null && all.length < expectedTotal) {
+            incomplete = true
+            inconsistent = true
+          }
           break
         }
         if (expectedTotal != null && all.length >= expectedTotal) break
@@ -719,10 +742,11 @@
       } catch (e) {
         ctx.host.log.warn("usage events fetch failed: " + String(e))
         incomplete = true
+        if (Date.now() >= deadlineMs) deadline = true
         break
       }
     }
-    return { events: all, truncated: truncated, incomplete: incomplete }
+    return { events: all, truncated: truncated, incomplete: incomplete, deadline: deadline, inconsistent: inconsistent }
   }
 
   function appendUsageEventBreakdown(ctx, lines, accessToken, usage) {
@@ -745,17 +769,25 @@
       for (var rangeEnd = todayStart; rangeEnd > firstDay; rangeEnd -= EVENTS_RANGE_DAYS * DAY_MS) {
         ranges.push([Math.max(firstDay, rangeEnd - EVENTS_RANGE_DAYS * DAY_MS), rangeEnd - 1])
       }
-      var fetched = { events: [], truncated: false, incomplete: false }
+      var fetched = { events: [], truncated: false, incomplete: false, deadline: false, inconsistent: false }
       for (var r = 0; r < ranges.length; r++) {
         var part = fetchFilteredUsageEvents(ctx, accessToken, ranges[r][0], ranges[r][1], deadline)
         for (var d = 0; d < part.events.length; d++) fetched.events.push(part.events[d])
         if (part.truncated || part.incomplete) {
           fetched.truncated = part.truncated
           fetched.incomplete = part.incomplete
+          fetched.deadline = part.deadline
+          fetched.inconsistent = part.inconsistent
           break
         }
       }
-      if (!fetched.events.length) return
+      if (!fetched.events.length) {
+        // An HTTP or network failure with no events (for example an account without event access) shows
+        // no event lines; a spent time budget or a self-contradicting answer says why the breakdown is missing.
+        if (fetched.deadline) lines.push(ctx.line.text({ label: "Events Note", value: "Partial sample (time limit)" }))
+        else if (fetched.inconsistent) lines.push(ctx.line.text({ label: "Events Note", value: "Partial sample (incomplete fetch)" }))
+        return
+      }
 
       var last7 = []
       var cycle = []
@@ -791,7 +823,12 @@
           "From Cursor usage events (API price / tokens).",
         )
       }
-      if (fetched.incomplete) {
+      if (fetched.deadline) {
+        lines.push(ctx.line.text({
+          label: "Events Note",
+          value: "Partial sample (time limit)",
+        }))
+      } else if (fetched.incomplete) {
         lines.push(ctx.line.text({
           label: "Events Note",
           value: "Partial sample (incomplete fetch)",

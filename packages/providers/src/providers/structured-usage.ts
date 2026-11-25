@@ -126,6 +126,11 @@ export class CursorUsageCollector {
       query.failed = true;
       return;
     }
+    // A bounded query whose list has a non-object entry cannot be counted reliably.
+    if ((Number.isFinite(query.start) || Number.isFinite(query.end)) && !body.usageEventsDisplay.every(isObject)) {
+      query.failed = true;
+      return;
+    }
     query.events.push(...body.usageEventsDisplay.filter(isObject));
     const total = finiteNumber(body.totalUsageEventsCount);
     if (total !== undefined) {
@@ -146,6 +151,13 @@ export class CursorUsageCollector {
     const completeDays = new Map<string, boolean>();
     for (const query of this.queries.values()) {
       if (query.failed || !query.complete) continue;
+      // A query with a requested bound that returns an event outside it, or one without a readable
+      // time, is not trusted for any day.
+      if ((Number.isFinite(query.start) || Number.isFinite(query.end)) && query.events.some((event) => {
+        const timestamp = eventTimestamp(event.timestamp);
+        const time = timestamp ? Date.parse(timestamp) : Number.NaN;
+        return !Number.isFinite(time) || time < query.start || time > query.end;
+      })) continue;
       for (const event of query.events) {
         if (!isObject(event.tokenUsage)) continue;
         const timestamp = eventTimestamp(event.timestamp);

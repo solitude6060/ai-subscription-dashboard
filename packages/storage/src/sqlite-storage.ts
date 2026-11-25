@@ -109,6 +109,8 @@ export class SqliteStorage implements Storage {
     }
 
     this.db = new Database(this.databasePath, { create: true });
+    // The WebUI server and the CLI can open the same database; wait for the other's write lock.
+    this.db.exec("PRAGMA busy_timeout = 5000");
     await chmod(this.databasePath, 0o600).catch(() => undefined);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS usage_records (
@@ -358,8 +360,9 @@ export class SqliteStorage implements Storage {
           deleteScope.run(record.providerId, record.tool, record.startedAt, record.source);
           // A daily row whose source covered the whole UTC day (completeDay, set by the Cursor collector)
           // also replaces that day's hourly rows, so an hour or model the source no longer reports does
-          // not stay in Allowance. Other rows, including today's partial Cursor day and any batch fetched
-          // before midnight, keep hourly rows upsert-only.
+          // not stay in Allowance. Other rows keep hourly rows upsert-only: the in-progress day, whose
+          // query ends at the request time (even when the write lands after midnight), Grok, ccusage
+          // and Pi. Closed days in the same batch still replace theirs.
           const dayStart = Date.parse(record.startedAt);
           if (record.completeDay === true && Number.isFinite(dayStart) && dayStart % DAY_MS === 0) {
             deleteHourlyDay.run(

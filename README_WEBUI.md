@@ -75,6 +75,15 @@ http://127.0.0.1:6736
 ~/.openusage-webui/plugins/<provider>/keychain.json
 ```
 
+`bun run status` prints the stored usage in the terminal; `bun run status:refresh` refreshes first. When a
+WebUI server answers on `127.0.0.1:${OPENUSAGE_WEBUI_PORT:-6736}` and reports the same database (compared as
+absolute paths with symlinks resolved), the refresh runs through that server (`POST /api/providers/refresh`),
+so the server stays the only writer; if that server request fails (HTTP error or no results list), the
+command exits with an error. Per-provider failures are printed and, as with a local refresh, do not change
+the exit code. A server that does not answer the health
+probe within 2 s also ends the command with an error, since it may be busy writing. Without a matching
+server (nothing listening, a non-WebUI answer, or another database), the command refreshes and writes locally.
+
 ## Production-Like Local Use
 
 ```bash

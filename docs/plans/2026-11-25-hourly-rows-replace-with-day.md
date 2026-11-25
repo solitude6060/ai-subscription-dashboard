@@ -24,8 +24,9 @@ whole UTC day (`startDate` and `endDate` given, `endDate >= day start + 24 h - 1
 provider and tool's `token_hourly` rows of the same UTC day before the batch's hourly rows are written,
 in the existing transaction. `completeDay` is not stored.
 
-Not changed: rows without `completeDay`, which include today's Cursor range (its query ends at the request
-time), a batch fetched before midnight and written later, Grok (a scan can skip an unreadable transcript),
+Not changed: rows without `completeDay`, which include the in-progress Cursor day (its query ends at the
+request time, so a batch fetched before midnight and written later keeps that day upsert-only while its
+closed days still replace), Grok (a scan can skip an unreadable transcript),
 `ccusage` and Pi (local-day labels; Pi emits no hourly rows); hourly rows of days the batch does not
 replace; batches without `replaceScopes`. (PR #74 review rounds 1 to 3: round 1 limited the rule to closed
 Cursor days, round 2 added a 10-minute grace after midnight, round 3 replaced both clock rules by the

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatBadgeLine } from "../src/cli-status";
+import { formatBadgeLine, webuiPort } from "../src/cli-status";
 
 // Strip ANSI color codes so assertions match on the visible text only.
 const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -39,5 +39,16 @@ describe("cli-status reset-credit badge", () => {
     );
     expect(out).toContain("n/a");
     expect(out).not.toContain("Invalid");
+  });
+});
+
+describe("cli-status WebUI port", () => {
+  test("uses OPENUSAGE_WEBUI_PORT when it is a valid port and 6736 otherwise", () => {
+    expect(webuiPort("7000")).toBe(7000);
+    expect(webuiPort(undefined)).toBe(6736);
+    expect(webuiPort("")).toBe(6736);
+    expect(webuiPort("0")).toBe(6736);
+    expect(webuiPort("70000")).toBe(6736);
+    expect(webuiPort("abc")).toBe(6736);
   });
 });
