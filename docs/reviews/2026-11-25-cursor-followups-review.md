@@ -22,3 +22,5 @@ Lane 3 thread `01a21371-b6ba-7a50-9e15-e1543eb6f08e`. Lane 3 is not counted as a
 | F1-4 | An empty `OPENUSAGE_WEBUI_PORT` gives port 0. | Lane 2 | LOW | Fix: empty means 6736; only integers 1..65535 are used. |
 | F1-5 | A request that times out after the events deadline does not set the deadline flag. | Lane 2 | LOW | Fix: a failed request at or after the deadline sets it. |
 | F1-6 | `storage.init()` runs before the server handoff and can hit `SQLITE_BUSY` during a server commit. | Lane 2 | LOW | Fix: the handoff runs first; storage is opened for the local branch and for printing. |
+
+Repairs after round 1: test `11aee269` (red on `d1b6c29e`), fix `7c963877`, docs `aad76156`. F1-4's helper test was added with its fix because the helper is new.
