@@ -21,10 +21,11 @@
   const REFRESH_BUFFER_MS = 5 * 60 * 1000 // refresh 5 minutes before expiration
   const LOGIN_HINT = "Sign in via Cursor app or run `agent login`."
   const ENCRYPTED_HINT = "Cursor app sign-in is encrypted and cannot be read. Run `agent login` (default account only)."
-  const EVENTS_PAGE_SIZE = 200
+  const EVENTS_PAGE_SIZE = 1000
   const EVENTS_MAX_PAGES = 10
   const MODEL_BREAKDOWN_LIMIT = 5
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+  const DAY_MS = 24 * 60 * 60 * 1000
 
   function readStateValueFrom(ctx, dbPath, key) {
     try {
@@ -643,7 +644,7 @@
     var session = buildSessionToken(ctx, accessToken)
     if (!session) {
       ctx.host.log.warn("usage events: cannot build session token")
-      return { events: [], truncated: false, incomplete: false }
+      return { events: [], truncated: false, incomplete: true }
     }
     var all = []
     var truncated = false
@@ -668,7 +669,7 @@
         })
         if (resp.status < 200 || resp.status >= 300) {
           ctx.host.log.warn("usage events returned status=" + resp.status)
-          if (all.length > 0) incomplete = true
+          incomplete = true
           break
         }
         var data = ctx.util.tryParseJson(resp.bodyText)
@@ -688,7 +689,7 @@
         }
       } catch (e) {
         ctx.host.log.warn("usage events fetch failed: " + String(e))
-        if (all.length > 0) incomplete = true
+        incomplete = true
         break
       }
     }
@@ -704,7 +705,19 @@
         cycleStart = sevenStart
       }
       var fetchStart = Math.min(sevenStart, cycleStart)
-      var fetched = fetchFilteredUsageEvents(ctx, accessToken, fetchStart, endMs)
+      // One request per UTC day, newest first: the host stores token rows by whole UTC day,
+      // so every query must start at 00:00 UTC. The first failed or capped day ends the fetch.
+      var fetched = { events: [], truncated: false, incomplete: false }
+      var firstDay = Math.floor(fetchStart / DAY_MS) * DAY_MS
+      for (var dayStart = Math.floor(endMs / DAY_MS) * DAY_MS; dayStart >= firstDay; dayStart -= DAY_MS) {
+        var day = fetchFilteredUsageEvents(ctx, accessToken, dayStart, Math.min(dayStart + DAY_MS - 1, endMs))
+        for (var d = 0; d < day.events.length; d++) fetched.events.push(day.events[d])
+        if (day.truncated || day.incomplete) {
+          fetched.truncated = day.truncated
+          fetched.incomplete = day.incomplete
+          break
+        }
+      }
       if (!fetched.events.length) return
 
       var last7 = []

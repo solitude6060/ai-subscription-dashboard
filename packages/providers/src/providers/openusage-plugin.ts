@@ -375,7 +375,7 @@ export class OpenUsagePluginProvider implements UsageProvider {
       }
       const response = this.requestImpl(opts);
       if (this.pluginId === "cursor" && opts.url.includes("get-filtered-usage-events")) {
-        cursorUsage.capture(response.status, response.bodyText);
+        cursorUsage.capture(response.status, response.bodyText, opts.bodyText);
       }
       return response;
     };
