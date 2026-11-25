@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -152,22 +152,31 @@ describe("token_hourly rows of a replaced day", () => {
     expect(hourlyRows(path)).toHaveLength(2);
   });
 
-  test("keeps today's Cursor hourly rows upsert-only, since an earlier refresh can commit after a later one", async () => {
-    const path = join(dataDir, "today.sqlite");
+  test.each([
+    ["9 minutes", 9, 2],
+    ["10 minutes", 10, 1],
+  ] as const)("replaces a Cursor day's hourly rows only once the day has been over for 10 minutes (%s)", async (_name, minutes, rows) => {
+    const path = join(dataDir, `grace-${minutes}.sqlite`);
     const storage = new SqliteStorage(path);
     await storage.init();
-    const today = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+    const day = "2026-11-24T00:00:00.000Z";
     const tool = "Cursor Usage Event";
     await storage.upsertUsageRecords([
-      hourly({ id: "h-t-old", providerId: "cursor", tool, source: "api", startedAt: today, model: "helios-alpha", totalTokens: 9 }),
+      hourly({ id: "h-old", providerId: "cursor", tool, source: "api", startedAt: "2026-11-24T23:00:00.000Z", model: "helios-alpha", totalTokens: 9 }),
     ]);
-    await storage.upsertUsageRecords([
-      daily({ id: "d-t", providerId: "cursor", tool, source: "api", startedAt: today, model: "Other", totalTokens: 9 }),
-      hourly({ id: "h-t-new", providerId: "cursor", tool, source: "api", startedAt: today, model: "Other", totalTokens: 9 }),
-    ], { replaceScopes: true });
+    // A refresh that fetched the day before midnight can still be writing just after it.
+    setSystemTime(new Date(Date.parse("2026-11-25T00:00:00.000Z") + minutes * 60_000));
+    try {
+      await storage.upsertUsageRecords([
+        daily({ id: "d-24", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
+        hourly({ id: "h-new", providerId: "cursor", tool, source: "api", startedAt: "2026-11-24T23:00:00.000Z", model: "Other", totalTokens: 9 }),
+      ], { replaceScopes: true });
+    } finally {
+      setSystemTime();
+    }
     storage.close();
 
-    expect(hourlyRows(path)).toHaveLength(2);
+    expect(hourlyRows(path)).toHaveLength(rows);
   });
 
   test("does not delete hourly rows for a daily row that does not start at 00:00 UTC", async () => {
