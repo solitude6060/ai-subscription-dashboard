@@ -162,6 +162,7 @@ Current WebUI provider support:
 - Antigravity via the original `plugins/antigravity/plugin.js` adapter (optional multi-home via Settings → Provider Accounts; includes `~/.agy-homes/*`)
 - Claude Code via the original `plugins/claude/plugin.js` adapter (optional multi-home via Settings → Provider Accounts)
 - Codex via the original `plugins/codex/plugin.js` adapter (optional multi-home via Settings → Provider Accounts)
+- [Google Colab](docs/providers/colab.md) via `colab usage` on the WebUI server for compute-unit balance and usage rate
 - Cursor via the original `plugins/cursor/plugin.js` adapter (optional multi-home via Settings → Provider Accounts)
 - Devin via the original `plugins/devin/plugin.js` adapter
 - Factory via the original `plugins/factory/plugin.js` adapter
