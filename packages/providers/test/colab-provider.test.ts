@@ -73,6 +73,25 @@ describe("ColabProvider", () => {
     expect(calls).toEqual([{ command: process.execPath, args: ["usage"], timeoutMs: 20_000 }]);
   });
 
+  test("the default runner uses the provider's injected environment", async () => {
+    const dir = mkdtempSync(join(import.meta.dir, ".colab-environment-"));
+    try {
+      const executable = join(dir, "usage-fixture");
+      writeFileSync(executable, [
+        "#!/bin/sh",
+        "printf 'Current balance: %s compute units\\n' \"${OPENUSAGE_COLAB_FIXTURE_BALANCE:-0.00}\"",
+        "",
+      ].join("\n"), { mode: 0o700 });
+      const provider = new ColabProvider({
+        env: { COLAB_CLI_PATH: executable, PATH: dir, OPENUSAGE_COLAB_FIXTURE_BALANCE: "341.98" },
+      });
+
+      expect((await provider.refresh()).map((record) => record.raw)).toEqual([{ lines: [balanceLine] }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a positive usage rate adds the estimated time left to one decimal place", async () => {
     const { provider } = makeProvider({
       ok: true,
