@@ -88,6 +88,24 @@ final class DashboardStoreTests: XCTestCase {
         XCTAssertEqual(store.pinnedQuotaID, "codex:work::5h")
     }
 
+    func testRestoresPinWhenReturningToATailscaleOrigin() {
+        let originalOrigin = "https://box.tailnet.ts.net"
+        for otherOrigin in ["https://other.tailnet.ts.net", ""] {
+            let store = DashboardStore(preferences: InMemoryDashboardPreferences(
+                selectedSource: .tailscale,
+                tailscaleOriginInput: originalOrigin
+            ))
+            store.togglePin(quotaID: "codex:work::5h")
+            XCTAssertEqual(store.pinnedQuotaID, "codex:work::5h")
+
+            XCTAssertTrue(store.updateTailscaleOrigin(otherOrigin))
+            XCTAssertNil(store.pinnedQuotaID)
+
+            XCTAssertTrue(store.updateTailscaleOrigin(originalOrigin))
+            XCTAssertEqual(store.pinnedQuotaID, "codex:work::5h")
+        }
+    }
+
     func testClockTickNotifiesObserversAndAgesAnUnchangedPinnedReading() async {
         let quota = UsageQuota(id: "codex::5h", label: "5h", used: 40, limit: 100, format: .percent)
         let loader = LockedBox<UsageDashboard?>(nil)
