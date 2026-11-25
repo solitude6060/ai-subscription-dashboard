@@ -18,27 +18,30 @@ only. `token_hourly` holds both names, so hourly totals exceed daily totals by 1
 
 ## Change
 
-When a batch with `replaceScopes` replaces the daily rows of a closed UTC day (the day ended at least 10
-minutes before the write, and the daily row starts at 00:00 UTC; a refresh that fetched the day before
-midnight writes within the 120 s worker limit) for `Cursor Usage Event`, it also deletes that provider's
-Cursor `token_hourly` rows of the same UTC day before the batch's hourly rows are written, in the
-existing transaction.
+`CursorUsageCollector` marks a daily row `completeDay` when every query that contributes to it covered the
+whole UTC day (`startDate` and `endDate` given, `endDate >= day start + 24 h - 1 ms`). When a batch with
+`replaceScopes` replaces such a daily row and the row starts at 00:00 UTC, storage also deletes that
+provider and tool's `token_hourly` rows of the same UTC day before the batch's hourly rows are written,
+in the existing transaction. `completeDay` is not stored.
 
-Not changed: today's hourly rows (an earlier refresh can commit after a later one), Grok (a scan can skip
-an unreadable transcript, so a day's batch can be partial), `ccusage` and Pi (local-day labels; Pi emits
-no hourly rows), hourly rows of days the batch does not replace, batches without `replaceScopes`.
-(PR #74 review round 1.)
-
-`CursorUsageCollector` emits daily and hourly rows only from complete queries that start at 00:00 UTC, so
-a replaced closed day's hourly rows come from the same complete data.
+Not changed: rows without `completeDay`, which include today's Cursor range (its query ends at the request
+time), a batch fetched before midnight and written later, Grok (a scan can skip an unreadable transcript),
+`ccusage` and Pi (local-day labels; Pi emits no hourly rows); hourly rows of days the batch does not
+replace; batches without `replaceScopes`. (PR #74 review rounds 1 to 3: round 1 limited the rule to closed
+Cursor days, round 2 added a 10-minute grace after midnight, round 3 replaced both clock rules by the
+query coverage.)
 
 ## Tests
 
+`packages/providers/test/cursor-usage-collector.test.ts`: a query covering whole UTC days marks them
+`completeDay`; today's range and a query without an explicit range do not.
+
 `packages/storage/test/token-hourly.test.ts`:
 
-- a replaced closed Cursor day loses the hours and models the batch no longer has;
-- Grok hourly rows, a Cursor day's hourly rows 9 minutes after it ends (replaced at 10 minutes, pinned clock)
-  and the hours around a daily row that does not start at 00:00 UTC stay;
+- a replaced complete Cursor day loses the hours and models the batch no longer has;
+- a Cursor daily row without `completeDay` keeps the day's hourly rows even when written two days later;
+  with `completeDay` it replaces them (pinned clock);
+- Grok hourly rows and the hours around a daily row that does not start at 00:00 UTC stay;
 - hourly rows of the neighbouring days (including the next day's 00:00) stay;
 - hourly rows stay when the batch carries hourly rows but no daily row for that day;
 - `ccusage` hourly rows stay when its daily scope is replaced.
@@ -49,5 +52,9 @@ a replaced closed day's hourly rows come from the same complete data.
 
 ## Exit Criteria
 
-- The stale-model test fails on `origin/main`; the round 1 tests (Grok, today, non-midnight) fail on `71fb80cf`; the 9-minute test fails on `dd82ec60`; neighbour-day, no-daily-row and ccusage tests are boundary locks that pass on every base. Full Vitest, Bun tests and builds pass.
-- Triple-review APPROVE; merge; deploy; after one Cursor refresh, hourly equals daily for the closed days 2026-11-16..24.
+- Baselines: the stale-model test fails on `origin/main`; the Grok and non-midnight tests fail on `71fb80cf`;
+  the no-`completeDay` test and the collector `completeDay` test fail on `c8699263`; the neighbour-day,
+  no-daily-row and `ccusage` tests are boundary locks that pass on every base. Full Vitest, Bun tests and
+  builds pass.
+- Triple-review APPROVE; merge; deploy; after one Cursor refresh, hourly equals daily for the closed days
+  2026-11-16..24.
