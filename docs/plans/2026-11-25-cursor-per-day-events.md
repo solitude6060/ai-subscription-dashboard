@@ -31,14 +31,20 @@ Evidence (deploy of PR #70, `../openusage_webui-artifacts/2026-11-25-cursor-encr
 Upstream `93e5897` (Swift, #1373) fetches each day separately with `pageSize` 1000, checks that
 `totalCount` is the same on every page, and caches finished days. The cache is not ported: the WebUI
 refreshes every 20 minutes (`AUTO_REFRESH_INTERVAL_MS`), and a 31-day window takes about 31 requests,
-within the 120 s plugin worker limit (`PLUGIN_REFRESH_WORKER_TIMEOUT_MS`).
+within the 120 s plugin worker limit (`PLUGIN_REFRESH_WORKER_TIMEOUT_MS`) but not the 30 s desktop probe
+limit (`src-tauri/src/plugin_engine/runtime.rs`). Closed days are therefore grouped into 7-day ranges; a
+closed 7-day range (2026-11-16..22) pages in two requests (1000 + 277 = 1277, no repeated event) and its
+per-day sums equal the per-day fetch (`range-paging-check.txt`).
 
 ## Change
 
-1. Plugin: fetch events one UTC day at a time, from 00:00 UTC of the window start day to now, newest
-   day first. Each request is `[dayStart, min(dayStart + 1 day - 1 ms, now)]` with `pageSize` 1000
-   (10 pages per day). A failed request marks the sample incomplete and stops the remaining days.
-   Line values are unchanged; they still filter events by `sevenStart` and `cycleStart`.
+1. Plugin: fetch events from 00:00 UTC of the window start day to now, newest first: today alone, then
+   closed days in ranges of up to 7 days, each `[00:00 UTC, later 00:00 UTC - 1 ms]`, with `pageSize` 1000
+   (10 pages per range). A failed request, an invalid body, a total that changes between pages, more
+   events than the total, or the 15 s events deadline marks the sample incomplete and stops the remaining
+   ranges; each request timeout is capped to the time left. Line values are unchanged; they still filter
+   events by `sevenStart` and `cycleStart`. (Review R1-1: the desktop host stops the probe at 30 s, and one
+   request per day needs about 32 requests late in a cycle.)
 2. Collector: track each query (request `startDate` and `endDate`) separately: its own events, total,
    completeness and failure. A query whose total changes between pages is incomplete. Without a total, a
    page shorter than the request `pageSize` (default 200) ends the query. `records()` uses only complete
@@ -51,8 +57,9 @@ Docs: `docs/providers/cursor.md` (events request description).
 
 ## Tests
 
-- Plugin: event requests are aligned UTC days with `pageSize` 1000, newest first; a failed day ends in
-  `Partial sample (incomplete fetch)` and no further day requests. Existing event tests get a mock that
+- Plugin: today, then 7-day ranges from 00:00 UTC with `pageSize` 1000, newest first; `now` at 00:00 UTC;
+  a failed range, an invalid body, a changed total, more events than the total and the deadline end in
+  `Partial sample (incomplete fetch)` with no further requests; the page cap stops after 10 requests. Existing event tests get a mock that
   returns only the fixture events inside each request range; their expected line values stay unchanged.
 - Collector: a query that starts inside a day emits no record for that day or for the hours before the
   start; completeness is tracked per query; a failed query does not drop another complete query; a query

@@ -171,18 +171,18 @@ Unofficial Cursor dashboard endpoint. Returns paginated usage events with per-re
 
 ```jsonc
 {
-  "startDate": "1774846800000", // unix ms string
-  "endDate": "1775451599999",
+  "startDate": "1795564800000", // unix ms string, 00:00 UTC
+  "endDate": "1795651199999",   // next 00:00 UTC - 1 ms, or now for today
   "page": 1,
-  "pageSize": 100
+  "pageSize": 1000
 }
 ```
 
-OpenUsage fetches events one UTC day at a time, newest day first, from 00:00 UTC of the earlier of the 7-day window start and the billing cycle start. Each request covers `[day start, min(next day start - 1 ms, now)]` with `pageSize` 1000 and up to 10 pages; `pageSize` 2000 returns HTTP 400. The first failed or capped day ends the fetch. The events are aggregated locally into **Last 7 Days** and **Billing Cycle** windows, daily cost/token bar charts, and the top models by cost. Failures are nonfatal: the main Credits / Total usage card still renders.
+OpenUsage fetches events from 00:00 UTC of the earlier of the 7-day window start and the billing cycle start, newest first: today (`[00:00 UTC, now]`), then closed days in ranges of up to 7 days, each starting at 00:00 UTC and ending 1 ms before a later 00:00 UTC. Each range is paged with `pageSize` 1000 and up to 10 pages; `pageSize` 2000 returns HTTP 400. All event requests share a 15 s deadline, and each request timeout is capped to the time left. The first failed, capped or late range ends the fetch; older ranges are then missing from the lines and their stored rows stay as they are. The events are aggregated locally into **Last 7 Days** and **Billing Cycle** windows, daily cost/token bar charts, and the top models by cost. Failures are nonfatal: the main Credits / Total usage card still renders.
 
-Token rows are stored per UTC day and per UTC hour, and each refresh replaces the stored days it returns. Rows come only from complete queries (all pages received, the same `totalUsageEventsCount` on every page), and only for days and hours that start at or after the query start.
+Token rows are stored per UTC day and per UTC hour, and each refresh replaces the stored days it returns. Rows come only from complete queries (all pages received, the same `totalUsageEventsCount` on every page, exactly that many events), and only for days and hours that start at or after the query start.
 
-Cost prefers positive `chargedCents`, then positive `tokenUsage.totalCents` (API price; numeric or numeric strings). Tokens use `tokenUsage.totalTokens` when present. If a day's pagination fails or hits the page cap, window totals append `· partial` and an **Events Note** marks the sample as partial.
+Cost prefers positive `chargedCents`, then positive `tokenUsage.totalCents` (API price; numeric or numeric strings). Tokens use `tokenUsage.totalTokens` when present. If a range fails (HTTP error, invalid body, changed total, more events than the total, deadline) or hits the page cap, window totals append `· partial` and an **Events Note** marks the sample as partial.
 
 ## Authentication
 
