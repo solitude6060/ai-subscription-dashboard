@@ -93,6 +93,7 @@ export interface ProviderStatus {
   enabled: boolean;
   detected: boolean;
   lastRefreshAt?: string;
+  lastSuccessAt?: string;
   lastError?: string;
 }
 

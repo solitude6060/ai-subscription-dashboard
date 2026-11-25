@@ -42,8 +42,9 @@ separate provider card.
 - No browser cookie scraping
 - No cloud sync
 - No remote dashboard
-- No macOS menu bar
 - No Linux tray yet
+
+The [macOS menu-bar app](docs/macos-menu-bar.md) can read this server through Tailscale or on the Mac's loopback interface.
 
 ## Install
 

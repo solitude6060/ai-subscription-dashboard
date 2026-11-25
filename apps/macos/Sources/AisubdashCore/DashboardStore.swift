@@ -1,0 +1,501 @@
+import Foundation
+import Observation
+
+public enum UsageSourceKind: String, CaseIterable, Sendable, Hashable {
+    case local
+    case tailscale
+}
+
+public enum RequestStatus: Equatable, Sendable {
+    case idle
+    case loading
+    case refreshingLocal
+    case failed(String)
+}
+
+public enum PinnedQuotaState: Equatable, Sendable {
+    case none
+    case unavailable
+    case missing(id: String)
+    case available(account: UsageAccount, quota: UsageQuota, isStale: Bool)
+}
+
+public enum AccountMoveDirection: Sendable {
+    case up
+    case down
+}
+
+public protocol DashboardPreferences: AnyObject {
+    var selectedSource: UsageSourceKind { get set }
+    var tailscaleOriginInput: String { get set }
+    var pinsByOrigin: [String: String] { get set }
+    var visibilityOverridesByOrigin: [String: [String: Bool]] { get set }
+    var orderByOrigin: [String: [String]] { get set }
+}
+
+public final class UserDefaultsDashboardPreferences: DashboardPreferences {
+    private enum Keys {
+        static let selectedSource = "aisubdash.selectedSource"
+        static let tailscaleOriginInput = "aisubdash.tailscaleOriginInput"
+        static let pinsByOrigin = "aisubdash.pinsByOrigin"
+        static let visibilityOverridesByOrigin = "aisubdash.visibilityOverridesByOrigin"
+        static let orderByOrigin = "aisubdash.orderByOrigin"
+    }
+
+    private let userDefaults: UserDefaults
+
+    public init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
+    public var selectedSource: UsageSourceKind {
+        get {
+            guard let raw = userDefaults.string(forKey: Keys.selectedSource),
+                  let kind = UsageSourceKind(rawValue: raw)
+            else {
+                return .local
+            }
+            return kind
+        }
+        set {
+            userDefaults.set(newValue.rawValue, forKey: Keys.selectedSource)
+        }
+    }
+
+    public var tailscaleOriginInput: String {
+        get { userDefaults.string(forKey: Keys.tailscaleOriginInput) ?? "" }
+        set { userDefaults.set(newValue, forKey: Keys.tailscaleOriginInput) }
+    }
+
+    public var pinsByOrigin: [String: String] {
+        get { userDefaults.dictionary(forKey: Keys.pinsByOrigin) as? [String: String] ?? [:] }
+        set { userDefaults.set(newValue, forKey: Keys.pinsByOrigin) }
+    }
+
+    public var visibilityOverridesByOrigin: [String: [String: Bool]] {
+        get { userDefaults.dictionary(forKey: Keys.visibilityOverridesByOrigin) as? [String: [String: Bool]] ?? [:] }
+        set { userDefaults.set(newValue, forKey: Keys.visibilityOverridesByOrigin) }
+    }
+
+    public var orderByOrigin: [String: [String]] {
+        get { userDefaults.dictionary(forKey: Keys.orderByOrigin) as? [String: [String]] ?? [:] }
+        set { userDefaults.set(newValue, forKey: Keys.orderByOrigin) }
+    }
+}
+
+public final class InMemoryDashboardPreferences: DashboardPreferences {
+    public var selectedSource: UsageSourceKind
+    public var tailscaleOriginInput: String
+    public var pinsByOrigin: [String: String]
+    public var visibilityOverridesByOrigin: [String: [String: Bool]]
+    public var orderByOrigin: [String: [String]]
+
+    public init(
+        selectedSource: UsageSourceKind = .local,
+        tailscaleOriginInput: String = "",
+        pinsByOrigin: [String: String] = [:],
+        visibilityOverridesByOrigin: [String: [String: Bool]] = [:],
+        orderByOrigin: [String: [String]] = [:]
+    ) {
+        self.selectedSource = selectedSource
+        self.tailscaleOriginInput = tailscaleOriginInput
+        self.pinsByOrigin = pinsByOrigin
+        self.visibilityOverridesByOrigin = visibilityOverridesByOrigin
+        self.orderByOrigin = orderByOrigin
+    }
+}
+
+@MainActor
+@Observable
+public final class DashboardStore {
+    public static let staleAgeThresholdSeconds: TimeInterval = 3600
+
+    public private(set) var selectedSource: UsageSourceKind
+    public private(set) var tailscaleOriginInput: String
+    public private(set) var pinnedQuotaID: String?
+    public private(set) var dashboard: UsageDashboard?
+    public private(set) var status: RequestStatus = .idle
+    public private(set) var isUsingCachedFallback: Bool = false
+    public private(set) var lastRefreshWarning: String?
+    public private(set) var clock = Date()
+
+    /// Advances the time the views render against; each tick notifies observers even
+    /// when no reading changed, so stale markers age without a new snapshot.
+    public func tick(now: Date = Date()) {
+        clock = now
+    }
+
+    public var currentEndpoint: UsageEndpoint? {
+        switch selectedSource {
+        case .local:
+            return .local
+        case .tailscale:
+            return UsageEndpoint(tailscale: tailscaleOriginInput)
+        }
+    }
+
+    public var isLoading: Bool { status == .loading }
+    public var isRefreshingLocal: Bool { status == .refreshingLocal }
+    public var isBusy: Bool { isLoading || isRefreshingLocal }
+    public var canFetchProviderUsage: Bool {
+        currentEndpoint?.isLocal == true && inFlightPostGeneration == nil && !isBusy
+    }
+
+    private let preferences: DashboardPreferences
+    private let loadDashboard: @Sendable (UsageEndpoint) async throws -> UsageDashboard
+    private let refreshLocalProviders: @Sendable () async throws -> Int
+
+    private var visibilityOverrides: [String: Bool] = [:]
+    private var accountOrder: [String] = []
+    private var lastGoodByEndpoint: [UsageEndpoint: UsageDashboard] = [:]
+    private var failedEndpoints: Set<UsageEndpoint> = []
+    private var generation: UInt64 = 0
+    private var inFlightGetGeneration: UInt64?
+    private var inFlightPostGeneration: UInt64?
+
+    public init(
+        preferences: DashboardPreferences = UserDefaultsDashboardPreferences(),
+        loadDashboard: @escaping @Sendable (UsageEndpoint) async throws -> UsageDashboard = { endpoint in
+            try await UsageClient().load(endpoint)
+        },
+        refreshLocalProviders: @escaping @Sendable () async throws -> Int = {
+            try await UsageClient().refreshLocal()
+        }
+    ) {
+        self.preferences = preferences
+        self.loadDashboard = loadDashboard
+        self.refreshLocalProviders = refreshLocalProviders
+        self.selectedSource = preferences.selectedSource
+        self.tailscaleOriginInput =
+            UsageEndpoint(tailscale: preferences.tailscaleOriginInput)?.origin.absoluteString ?? ""
+        if let origin = currentEndpoint?.origin.absoluteString {
+            self.pinnedQuotaID = preferences.pinsByOrigin[origin]
+            self.visibilityOverrides = preferences.visibilityOverridesByOrigin[origin] ?? [:]
+            self.accountOrder = preferences.orderByOrigin[origin] ?? []
+        }
+    }
+
+    public func selectSource(_ source: UsageSourceKind) {
+        guard selectedSource != source else { return }
+        selectedSource = source
+        preferences.selectedSource = source
+        resetStateForEndpointChange()
+    }
+
+    @discardableResult
+    public func updateTailscaleOrigin(_ draft: String) -> Bool {
+        let input = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = UsageEndpoint(tailscale: input)
+        guard input.isEmpty || endpoint != nil else { return false }
+
+        let origin = endpoint?.origin.absoluteString ?? ""
+        guard tailscaleOriginInput != origin else { return true }
+        let previousOrigin = tailscaleOriginInput
+        tailscaleOriginInput = origin
+        preferences.tailscaleOriginInput = origin
+        if !previousOrigin.isEmpty {
+            if let previous = UsageEndpoint(tailscale: previousOrigin) {
+                lastGoodByEndpoint.removeValue(forKey: previous)
+                failedEndpoints.remove(previous)
+            }
+        }
+        if selectedSource == .tailscale {
+            resetStateForEndpointChange()
+        }
+        return true
+    }
+
+    public func togglePin(quotaID: String) {
+        guard let endpoint = currentEndpoint else { return }
+        pinnedQuotaID = pinnedQuotaID == quotaID ? nil : quotaID
+        preferences.pinsByOrigin[endpoint.origin.absoluteString] = pinnedQuotaID
+    }
+
+    /// Saved IDs first in saved order, then accounts not in the saved list in server order.
+    /// Saved IDs absent from the dashboard are skipped but stay stored.
+    public var orderedAccounts: [UsageAccount] {
+        let accounts = dashboard?.accounts ?? []
+        let rank = Dictionary(accountOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
+        let saved = accounts.filter { rank[$0.id] != nil }.sorted { rank[$0.id]! < rank[$1.id]! }
+        return saved + accounts.filter { rank[$0.id] == nil }
+    }
+
+    /// Moves a visible account onto another visible one: directly after the target when it
+    /// was before it, otherwise directly before it. Every other saved or current entry,
+    /// hidden or absent, keeps its relative order.
+    @discardableResult
+    public func moveAccount(_ providerID: String, onto targetID: String) -> Bool {
+        let visibleIDs = Set(visibleAccounts.map(\.id))
+        guard let origin = currentEndpoint?.origin.absoluteString,
+              providerID != targetID,
+              visibleIDs.contains(providerID),
+              visibleIDs.contains(targetID)
+        else {
+            return false
+        }
+        // Stored IDs (including absent ones) first, then current IDs not yet stored.
+        var seen = Set<String>()
+        var order = (accountOrder + (dashboard?.accounts.map(\.id) ?? [])).filter { seen.insert($0).inserted }
+        guard let from = order.firstIndex(of: providerID),
+              let to = order.firstIndex(of: targetID)
+        else {
+            return false
+        }
+        order.remove(at: from)
+        let target = order.firstIndex(of: targetID)!
+        order.insert(providerID, at: from < to ? target + 1 : target)
+        accountOrder = order
+        preferences.orderByOrigin[origin] = order
+        return true
+    }
+
+    /// Moves a visible account past its nearest visible neighbour in `direction`.
+    @discardableResult
+    public func moveAccount(_ providerID: String, _ direction: AccountMoveDirection) -> Bool {
+        let visibleIDs = visibleAccounts.map(\.id)
+        guard let index = visibleIDs.firstIndex(of: providerID) else { return false }
+        let neighbour = direction == .up ? index - 1 : index + 1
+        guard visibleIDs.indices.contains(neighbour) else { return false }
+        return moveAccount(providerID, onto: visibleIDs[neighbour])
+    }
+
+    public var visibleAccounts: [UsageAccount] {
+        orderedAccounts.filter { isAccountVisible($0) }
+    }
+
+    public var hiddenAccountCount: Int {
+        (dashboard?.accounts.count ?? 0) - visibleAccounts.count
+    }
+
+    public var nearLimitCount: Int {
+        visibleAccounts.flatMap(\.quotas).filter { QuotaFormatter.usageLevel($0) == .critical }.count
+    }
+
+    public var hasCustomOrder: Bool { !accountOrder.isEmpty }
+
+    public var hasVisibilityOverrides: Bool { !visibilityOverrides.isEmpty }
+
+    public var pinnedProviderID: String? {
+        pinnedQuotaID.flatMap { UsageQuota.providerID(fromID: $0) }
+    }
+
+    public func isAccountVisible(_ account: UsageAccount) -> Bool {
+        visibilityOverrides[account.id] ?? !account.quotas.isEmpty
+    }
+
+    public func setAccountVisibility(_ isVisible: Bool, providerID: String) {
+        guard let origin = currentEndpoint?.origin.absoluteString else { return }
+        visibilityOverrides[providerID] = isVisible
+        preferences.visibilityOverridesByOrigin[origin] = visibilityOverrides
+    }
+
+    public func resetVisibilityOverrides() {
+        guard let origin = currentEndpoint?.origin.absoluteString else { return }
+        visibilityOverrides = [:]
+        preferences.visibilityOverridesByOrigin.removeValue(forKey: origin)
+    }
+
+    public func resetAccountOrder() {
+        guard let origin = currentEndpoint?.origin.absoluteString else { return }
+        accountOrder = []
+        preferences.orderByOrigin.removeValue(forKey: origin)
+    }
+
+    public func reload() async {
+        guard inFlightPostGeneration != generation,
+              inFlightGetGeneration != generation
+        else {
+            return
+        }
+        await performGet()
+    }
+
+    public func fetchProviderUsage() async {
+        guard canFetchProviderUsage, let endpoint = currentEndpoint else {
+            return
+        }
+
+        let capturedEndpoint = endpoint
+        let capturedGeneration = generation
+        inFlightPostGeneration = capturedGeneration
+        status = .refreshingLocal
+        lastRefreshWarning = nil
+
+        defer {
+            if inFlightPostGeneration == capturedGeneration {
+                inFlightPostGeneration = nil
+            }
+        }
+
+        do {
+            let failedCount = try await refreshLocalProviders()
+            guard currentEndpoint == capturedEndpoint,
+                  generation == capturedGeneration
+            else {
+                return
+            }
+
+            if failedCount > 0 {
+                lastRefreshWarning = "\(failedCount) provider(s) failed to refresh."
+            }
+
+            await performGet(expectedEndpoint: capturedEndpoint, expectedGeneration: capturedGeneration)
+        } catch {
+            guard currentEndpoint == capturedEndpoint,
+                  generation == capturedGeneration
+            else {
+                return
+            }
+            if Task.isCancelled || error is CancellationError {
+                status = .idle
+                return
+            }
+            lastRefreshWarning = "Provider refresh failed. \(Self.genericErrorMessage(for: error))"
+            await performGet(expectedEndpoint: capturedEndpoint, expectedGeneration: capturedGeneration)
+        }
+    }
+
+    public func isAccountStale(_ account: UsageAccount, now: Date = Date()) -> Bool {
+        if isUsingCachedFallback {
+            return true
+        }
+        if let observedAt = account.observedAt,
+           now.timeIntervalSince(observedAt) > Self.staleAgeThresholdSeconds
+        {
+            return true
+        }
+        return account.quotas.contains { quota in
+            if let resetsAt = quota.resetsAt {
+                return resetsAt <= now
+            }
+            return false
+        }
+    }
+
+    public func isQuotaStale(_ quota: UsageQuota, in account: UsageAccount, now: Date = Date()) -> Bool {
+        if isUsingCachedFallback {
+            return true
+        }
+        if let observedAt = account.observedAt,
+           now.timeIntervalSince(observedAt) > Self.staleAgeThresholdSeconds
+        {
+            return true
+        }
+        if let resetsAt = quota.resetsAt, resetsAt <= now {
+            return true
+        }
+        return false
+    }
+
+    public func pinnedQuotaState(now: Date = Date()) -> PinnedQuotaState {
+        guard let pinnedQuotaID else {
+            return .none
+        }
+        guard let accounts = dashboard?.accounts else {
+            return .unavailable
+        }
+        for account in accounts {
+            if let quota = account.quotas.first(where: { $0.id == pinnedQuotaID }) {
+                let stale = isQuotaStale(quota, in: account, now: now)
+                return .available(account: account, quota: quota, isStale: stale)
+            }
+        }
+        return .missing(id: pinnedQuotaID)
+    }
+
+    private func resetStateForEndpointChange() {
+        generation &+= 1
+        status = .idle
+        lastRefreshWarning = nil
+        if let endpoint = currentEndpoint {
+            let origin = endpoint.origin.absoluteString
+            pinnedQuotaID = preferences.pinsByOrigin[origin]
+            visibilityOverrides = preferences.visibilityOverridesByOrigin[origin] ?? [:]
+            accountOrder = preferences.orderByOrigin[origin] ?? []
+            dashboard = lastGoodByEndpoint[endpoint]
+            isUsingCachedFallback = failedEndpoints.contains(endpoint) && dashboard != nil
+        } else {
+            pinnedQuotaID = nil
+            visibilityOverrides = [:]
+            accountOrder = []
+            dashboard = nil
+            isUsingCachedFallback = false
+        }
+    }
+
+    private func performGet(
+        expectedEndpoint: UsageEndpoint? = nil,
+        expectedGeneration: UInt64? = nil
+    ) async {
+        let capturedEndpoint: UsageEndpoint
+        let capturedGeneration: UInt64
+
+        if let expectedEndpoint, let expectedGeneration {
+            capturedEndpoint = expectedEndpoint
+            capturedGeneration = expectedGeneration
+        } else {
+            guard let endpoint = currentEndpoint else {
+                dashboard = nil
+                isUsingCachedFallback = false
+                status = .idle
+                return
+            }
+            capturedEndpoint = endpoint
+            capturedGeneration = generation
+        }
+
+        inFlightGetGeneration = capturedGeneration
+        status = .loading
+
+        defer {
+            if inFlightGetGeneration == capturedGeneration {
+                inFlightGetGeneration = nil
+            }
+        }
+
+        do {
+            let loaded = try await loadDashboard(capturedEndpoint)
+            try Task.checkCancellation()
+            guard currentEndpoint == capturedEndpoint,
+                  generation == capturedGeneration
+            else {
+                return
+            }
+            lastGoodByEndpoint[capturedEndpoint] = loaded
+            failedEndpoints.remove(capturedEndpoint)
+            dashboard = loaded
+            isUsingCachedFallback = false
+            status = .idle
+        } catch {
+            guard currentEndpoint == capturedEndpoint,
+                  generation == capturedGeneration
+            else {
+                return
+            }
+            if Task.isCancelled || error is CancellationError {
+                status = .idle
+                return
+            }
+            failedEndpoints.insert(capturedEndpoint)
+            dashboard = lastGoodByEndpoint[capturedEndpoint]
+            isUsingCachedFallback = (dashboard != nil)
+            status = .failed(Self.genericErrorMessage(for: error))
+        }
+    }
+
+    private static func genericErrorMessage(for error: Error) -> String {
+        guard let clientError = error as? UsageClientError else {
+            return "Unable to reach the selected source."
+        }
+        switch clientError {
+        case .httpError(let statusCode):
+            return "Server returned HTTP \(statusCode)."
+        case .decodingFailed:
+            return "Received an unexpected response format."
+        case .invalidResponse:
+            return "Invalid server response."
+        case .networkError:
+            return "Unable to reach the selected source."
+        }
+    }
+}
