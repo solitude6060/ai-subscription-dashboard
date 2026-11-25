@@ -22,6 +22,11 @@ public enum QuotaFormatter {
         }
     }
 
+    public static func cardValue(_ quota: UsageQuota) -> String {
+        guard case .usd = quota.format else { return compactValue(quota) }
+        return String(format: "$%.2f / $%.2f", quota.used, quota.limit)
+    }
+
     public static func absoluteTimestamp(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
     }

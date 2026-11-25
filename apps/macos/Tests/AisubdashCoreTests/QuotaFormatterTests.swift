@@ -92,10 +92,3 @@ final class QuotaFormatterTests: XCTestCase {
         UsageQuota(id: "5:codex2:5h:1", label: "5h", used: used, limit: limit, format: format)
     }
 }
-
-private extension QuotaFormatter {
-    // The card currently uses the compact formatter.
-    static func cardValue(_ quota: UsageQuota) -> String {
-        compactValue(quota)
-    }
-}

@@ -147,7 +147,7 @@ private struct QuotaRowView: View {
 
     var body: some View {
         let level = QuotaFormatter.usageLevel(quota)
-        let value = QuotaFormatter.compactValue(quota)
+        let value = QuotaFormatter.cardValue(quota)
         let countdown = QuotaFormatter.resetCountdown(quota.resetsAt, now: now)
         let spokenCountdown = QuotaFormatter.resetCountdown(quota.resetsAt, now: now, spoken: true)
         let spokenDetails: [String?] = [quota.label, value, levelDescription(level), spokenCountdown]
