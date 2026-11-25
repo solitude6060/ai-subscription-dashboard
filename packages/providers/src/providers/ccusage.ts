@@ -121,10 +121,19 @@ export class CcusageProvider implements UsageProvider {
   }
 }
 
-export async function runCcusageCommand(
+export function runCcusageCommand(
   command: string,
   args: string[],
   timeoutMs = COMMAND_TIMEOUT_MS,
+): Promise<CcusageCommandResult> {
+  return runCommand(command, args, timeoutMs, "ccusage");
+}
+
+export async function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs = COMMAND_TIMEOUT_MS,
+  commandName = command,
 ): Promise<CcusageCommandResult> {
   let proc: ReturnType<typeof Bun.spawn>;
   const commandLine = process.platform === "linux" ? ["setsid", command, ...args] : [command, ...args];
@@ -138,7 +147,7 @@ export async function runCcusageCommand(
     return {
       ok: false,
       stdout: "",
-      stderr: error instanceof Error ? error.message : "ccusage command failed to spawn",
+      stderr: error instanceof Error ? error.message : `${commandName} command failed to spawn`,
     };
   }
   const stdoutPromise = new Response(proc.stdout).text();
@@ -155,7 +164,7 @@ export async function runCcusageCommand(
     await killProcessTree(proc.pid);
     await proc.exited.catch(() => undefined);
     await Promise.all([stdoutPromise.catch(() => ""), stderrPromise.catch(() => "")]);
-    return { ok: false, stdout: "", stderr: "ccusage command timed out" };
+    return { ok: false, stdout: "", stderr: `${commandName} command timed out` };
   }
 
   const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise]);
