@@ -21,10 +21,16 @@
   const REFRESH_BUFFER_MS = 5 * 60 * 1000 // refresh 5 minutes before expiration
   const LOGIN_HINT = "Sign in via Cursor app or run `agent login`."
   const ENCRYPTED_HINT = "Cursor app sign-in is encrypted and cannot be read. Run `agent login` (default account only)."
-  const EVENTS_PAGE_SIZE = 200
+  const EVENTS_PAGE_SIZE = 1000
   const EVENTS_MAX_PAGES = 10
+  const EVENTS_RANGE_DAYS = 7
+  const EVENTS_DEADLINE_MS = 15000
+  // The desktop host stops the whole probe at 30 s; event requests end 25 s after the probe start.
+  const PROBE_EVENTS_END_MS = 25000
+  const EVENTS_REQUEST_TIMEOUT_MS = 15000
   const MODEL_BREAKDOWN_LIMIT = 5
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+  const DAY_MS = 24 * 60 * 60 * 1000
 
   function readStateValueFrom(ctx, dbPath, key) {
     try {
@@ -639,16 +645,23 @@
     }
   }
 
-  function fetchFilteredUsageEvents(ctx, accessToken, startMs, endMs) {
+  function fetchFilteredUsageEvents(ctx, accessToken, startMs, endMs, deadlineMs) {
     var session = buildSessionToken(ctx, accessToken)
     if (!session) {
       ctx.host.log.warn("usage events: cannot build session token")
-      return { events: [], truncated: false, incomplete: false }
+      return { events: [], truncated: false, incomplete: true }
     }
     var all = []
     var truncated = false
     var incomplete = false
+    var expectedTotal = null
     for (var page = 1; page <= EVENTS_MAX_PAGES; page++) {
+      var remainingMs = deadlineMs - Date.now()
+      if (remainingMs <= 0) {
+        ctx.host.log.warn("usage events: deadline reached")
+        incomplete = true
+        break
+      }
       try {
         var resp = ctx.util.request({
           method: "POST",
@@ -664,31 +677,48 @@
             page: page,
             pageSize: EVENTS_PAGE_SIZE,
           }),
-          timeoutMs: 15000,
+          timeoutMs: Math.min(EVENTS_REQUEST_TIMEOUT_MS, remainingMs),
         })
         if (resp.status < 200 || resp.status >= 300) {
           ctx.host.log.warn("usage events returned status=" + resp.status)
-          if (all.length > 0) incomplete = true
+          incomplete = true
           break
         }
         var data = ctx.util.tryParseJson(resp.bodyText)
-        var batch = data && Array.isArray(data.usageEventsDisplay) ? data.usageEventsDisplay : []
-        for (var i = 0; i < batch.length; i++) all.push(batch[i])
-        var total =
-          data && typeof data.totalUsageEventsCount === "number"
-            ? data.totalUsageEventsCount
-            : null
-        if (batch.length < EVENTS_PAGE_SIZE) {
-          if (total != null && all.length < total) truncated = true
+        // The API answers a range without events with {} on the first page.
+        var plain = !!data && typeof data === "object" && !Array.isArray(data)
+        var empty = plain && page === 1 && Object.keys(data).length === 0
+        if (!plain || (!empty && !Array.isArray(data.usageEventsDisplay))) {
+          ctx.host.log.warn("usage events: invalid response")
+          incomplete = true
           break
         }
-        if (total != null && all.length >= total) break
-        if (page === EVENTS_MAX_PAGES && (total == null || all.length < total)) {
+        var batch = empty ? [] : data.usageEventsDisplay
+        var total = typeof data.totalUsageEventsCount === "number" ? data.totalUsageEventsCount : null
+        // The host stores a range only with a stable total and an exact count; flag the same cases here.
+        if (total != null && expectedTotal != null && total !== expectedTotal) {
+          ctx.host.log.warn("usage events: total changed between pages")
+          incomplete = true
+          break
+        }
+        if (total != null) expectedTotal = total
+        for (var i = 0; i < batch.length; i++) all.push(batch[i])
+        if (expectedTotal != null && all.length > expectedTotal) {
+          ctx.host.log.warn("usage events: more events than the total")
+          incomplete = true
+          break
+        }
+        if (batch.length < EVENTS_PAGE_SIZE) {
+          if (expectedTotal != null && all.length < expectedTotal) truncated = true
+          break
+        }
+        if (expectedTotal != null && all.length >= expectedTotal) break
+        if (page === EVENTS_MAX_PAGES && (expectedTotal == null || all.length < expectedTotal)) {
           truncated = true
         }
       } catch (e) {
         ctx.host.log.warn("usage events fetch failed: " + String(e))
-        if (all.length > 0) incomplete = true
+        incomplete = true
         break
       }
     }
@@ -704,7 +734,27 @@
         cycleStart = sevenStart
       }
       var fetchStart = Math.min(sevenStart, cycleStart)
-      var fetched = fetchFilteredUsageEvents(ctx, accessToken, fetchStart, endMs)
+      // Today alone, then closed days in 7-day ranges, newest first. Every range starts at 00:00 UTC
+      // because the host replaces stored token rows by whole UTC day; closed days page stably.
+      // The deadline keeps the probe inside the desktop host's 30 s limit. The first failed,
+      // capped or late range ends the fetch.
+      var deadline = Math.min(Date.now() + EVENTS_DEADLINE_MS, probeStartedAt + PROBE_EVENTS_END_MS)
+      var firstDay = Math.floor(fetchStart / DAY_MS) * DAY_MS
+      var todayStart = Math.floor(endMs / DAY_MS) * DAY_MS
+      var ranges = [[todayStart, endMs]]
+      for (var rangeEnd = todayStart; rangeEnd > firstDay; rangeEnd -= EVENTS_RANGE_DAYS * DAY_MS) {
+        ranges.push([Math.max(firstDay, rangeEnd - EVENTS_RANGE_DAYS * DAY_MS), rangeEnd - 1])
+      }
+      var fetched = { events: [], truncated: false, incomplete: false }
+      for (var r = 0; r < ranges.length; r++) {
+        var part = fetchFilteredUsageEvents(ctx, accessToken, ranges[r][0], ranges[r][1], deadline)
+        for (var d = 0; d < part.events.length; d++) fetched.events.push(part.events[d])
+        if (part.truncated || part.incomplete) {
+          fetched.truncated = part.truncated
+          fetched.incomplete = part.incomplete
+          break
+        }
+      }
       if (!fetched.events.length) return
 
       var last7 = []
@@ -831,7 +881,10 @@
     )
   }
 
+  var probeStartedAt = 0
+
   function probe(ctx) {
+    probeStartedAt = Date.now()
     const authState = loadAuthState(ctx)
     let accessToken = authState.accessToken
     const refreshTokenValue = authState.refreshToken

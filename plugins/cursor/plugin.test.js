@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { makeCtx } from "../test-helpers.js"
 
 const STATE_DB_MAC =
@@ -15,6 +15,22 @@ function makeJwt(payload) {
     .toString("base64")
     .replace(/=+$/g, "")
   return `a.${jwtPayload}.c`
+}
+
+// Answers get-filtered-usage-events like the API: only events inside [startDate, endDate], paged by pageSize.
+function usageEventsResponse(opts, events) {
+  const body = JSON.parse(opts.bodyText)
+  const start = Number(body.startDate)
+  const end = Number(body.endDate)
+  const inRange = events.filter((event) => Number(event.timestamp) >= start && Number(event.timestamp) <= end)
+  const from = (body.page - 1) * body.pageSize
+  return {
+    status: 200,
+    bodyText: JSON.stringify({
+      totalUsageEventsCount: inRange.length,
+      usageEventsDisplay: inRange.slice(from, from + body.pageSize),
+    }),
+  }
 }
 
 describe("cursor plugin", () => {
@@ -2232,33 +2248,27 @@ describe("cursor plugin", () => {
         expect(opts.headers.Cookie).toContain("WorkosCursorSessionToken=user_abc123%3A%3A")
         const body = JSON.parse(opts.bodyText)
         expect(body.page).toBe(1)
-        expect(body.pageSize).toBe(200)
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            totalUsageEventsCount: 3,
-            usageEventsDisplay: [
-              {
-                timestamp: String(now - 2 * 24 * 60 * 60 * 1000),
-                model: "claude-4.6-opus-high-thinking",
-                chargedCents: 250,
-                tokenUsage: { totalTokens: 12000, totalCents: 250 },
-              },
-              {
-                timestamp: String(now - 3 * 24 * 60 * 60 * 1000),
-                model: "composer-2",
-                chargedCents: 100,
-                tokenUsage: { totalTokens: 4000, totalCents: 100 },
-              },
-              {
-                timestamp: String(now - 15 * 24 * 60 * 60 * 1000),
-                model: "claude-4.6-sonnet-medium-thinking",
-                chargedCents: 400,
-                tokenUsage: { totalTokens: 20000, totalCents: 400 },
-              },
-            ],
-          }),
-        }
+        expect(body.pageSize).toBe(1000)
+        return usageEventsResponse(opts, [
+          {
+            timestamp: String(now - 2 * 24 * 60 * 60 * 1000),
+            model: "claude-4.6-opus-high-thinking",
+            chargedCents: 250,
+            tokenUsage: { totalTokens: 12000, totalCents: 250 },
+          },
+          {
+            timestamp: String(now - 3 * 24 * 60 * 60 * 1000),
+            model: "composer-2",
+            chargedCents: 100,
+            tokenUsage: { totalTokens: 4000, totalCents: 100 },
+          },
+          {
+            timestamp: String(now - 15 * 24 * 60 * 60 * 1000),
+            model: "claude-4.6-sonnet-medium-thinking",
+            chargedCents: 400,
+            tokenUsage: { totalTokens: 20000, totalCents: 400 },
+          },
+        ])
       }
       return { status: 200, bodyText: "{}" }
     })
@@ -2304,20 +2314,14 @@ describe("cursor plugin", () => {
         }
       }
       if (url.includes("get-filtered-usage-events")) {
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            totalUsageEventsCount: 1,
-            usageEventsDisplay: [
-              {
-                timestamp: String(now - 60 * 60 * 1000),
-                model: "composer-2",
-                chargedCents: "175",
-                tokenUsage: { totalTokens: "2500", totalCents: "175" },
-              },
-            ],
-          }),
-        }
+        return usageEventsResponse(opts, [
+          {
+            timestamp: String(now - 60 * 60 * 1000),
+            model: "composer-2",
+            chargedCents: "175",
+            tokenUsage: { totalTokens: "2500", totalCents: "175" },
+          },
+        ])
       }
       return { status: 200, bodyText: "{}" }
     })
@@ -2351,7 +2355,7 @@ describe("cursor plugin", () => {
         const body = JSON.parse(opts.bodyText)
         if (body.page === 1) {
           const events = []
-          for (let i = 0; i < 200; i++) {
+          for (let i = 0; i < body.pageSize; i++) {
             events.push({
               timestamp: String(now - 60 * 60 * 1000),
               model: "composer-2",
@@ -2362,7 +2366,7 @@ describe("cursor plugin", () => {
           return {
             status: 200,
             bodyText: JSON.stringify({
-              totalUsageEventsCount: 450,
+              totalUsageEventsCount: 2 * body.pageSize + 50,
               usageEventsDisplay: events,
             }),
           }
@@ -2375,7 +2379,7 @@ describe("cursor plugin", () => {
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
     expect(result.lines.find((line) => line.label === "Last 7 Days")?.value).toBe(
-      "$2.00 · 200 calls · 2K tokens · partial",
+      "$10.00 · 1000 calls · 10K tokens · partial",
     )
     expect(result.lines.find((line) => line.label === "Events Note")?.value).toBe(
       "Partial sample (incomplete fetch)",
@@ -2403,7 +2407,7 @@ describe("cursor plugin", () => {
       if (url.includes("get-filtered-usage-events")) {
         const body = JSON.parse(opts.bodyText)
         const events = []
-        for (let i = 0; i < 200; i++) {
+        for (let i = 0; i < body.pageSize; i++) {
           events.push({
             timestamp: String(now - 60 * 60 * 1000),
             model: "composer-2",
@@ -2414,7 +2418,7 @@ describe("cursor plugin", () => {
         return {
           status: 200,
           bodyText: JSON.stringify({
-            totalUsageEventsCount: 5000,
+            totalUsageEventsCount: 50000,
             usageEventsDisplay: events,
             page: body.page,
           }),
@@ -2429,6 +2433,9 @@ describe("cursor plugin", () => {
     expect(result.lines.find((line) => line.label === "Events Note")?.value).toBe(
       "Partial sample (page cap)",
     )
+    expect(
+      ctx.host.http.request.mock.calls.filter(([opts]) => String(opts.url).includes("get-filtered-usage-events")),
+    ).toHaveLength(10)
   })
 
   it("uses tokenUsage.totalCents when chargedCents is zero", async () => {
@@ -2450,20 +2457,14 @@ describe("cursor plugin", () => {
         }
       }
       if (url.includes("get-filtered-usage-events")) {
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            totalUsageEventsCount: 1,
-            usageEventsDisplay: [
-              {
-                timestamp: String(now - 60 * 60 * 1000),
-                model: "composer-2",
-                chargedCents: 0,
-                tokenUsage: { totalTokens: 1000, totalCents: 250 },
-              },
-            ],
-          }),
-        }
+        return usageEventsResponse(opts, [
+          {
+            timestamp: String(now - 60 * 60 * 1000),
+            model: "composer-2",
+            chargedCents: 0,
+            tokenUsage: { totalTokens: 1000, totalCents: 250 },
+          },
+        ])
       }
       return { status: 200, bodyText: "{}" }
     })
@@ -2500,5 +2501,243 @@ describe("cursor plugin", () => {
     const result = plugin.probe(ctx)
     expect(result.lines.find((line) => line.label === "Total usage")).toBeTruthy()
     expect(result.lines.find((line) => line.label === "Last 7 Days")).toBeUndefined()
+  })
+})
+
+describe("cursor usage event ranges", () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const NOW = Date.parse("2026-11-25T12:00:00.000Z")
+  const CYCLE_START = Date.parse("2026-11-16T07:30:00.000Z")
+
+  beforeEach(() => {
+    delete globalThis.__openusage_plugin
+    vi.resetModules()
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(NOW)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function setup(eventsHandler) {
+    const ctx = makeCtx()
+    const accessToken = makeJwt({ sub: "google-oauth2|user_abc123", exp: 9999999999 })
+    ctx.host.sqlite.query.mockReturnValue(JSON.stringify([{ value: accessToken }]))
+    const eventBodies = []
+    const eventTimeouts = []
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url.includes("GetCurrentPeriodUsage")) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({
+            enabled: true,
+            billingCycleStart: String(CYCLE_START),
+            billingCycleEnd: String(CYCLE_START + 30 * DAY),
+            planUsage: { totalSpend: 1200, limit: 2400, totalPercentUsed: 50 },
+          }),
+        }
+      }
+      if (url.includes("get-filtered-usage-events")) {
+        eventBodies.push(JSON.parse(opts.bodyText))
+        eventTimeouts.push(opts.timeoutMs)
+        return eventsHandler(opts)
+      }
+      return { status: 200, bodyText: "{}" }
+    })
+    return { ctx, eventBodies, eventTimeouts }
+  }
+
+  const range = (start, end) => ({ startDate: String(Date.parse(start)), endDate: String(Date.parse(end)), page: 1, pageSize: 1000 })
+  const todayEvent = {
+    timestamp: String(Date.parse("2026-11-25T08:00:00.000Z")),
+    model: "composer-2",
+    chargedCents: 100,
+    tokenUsage: { totalTokens: 1000 },
+  }
+  const lineValue = (result, label) => result.lines.find((line) => line.label === label)?.value
+
+  it("fetches today, then closed days in 7-day ranges from 00:00 UTC of the window start day", async () => {
+    const { ctx, eventBodies } = setup((opts) => usageEventsResponse(opts, []))
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+
+    expect(eventBodies).toEqual([
+      range("2026-11-25T00:00:00.000Z", "2026-11-25T12:00:00.000Z"),
+      range("2026-11-18T00:00:00.000Z", "2026-11-24T23:59:59.999Z"),
+      range("2026-11-16T00:00:00.000Z", "2026-11-17T23:59:59.999Z"),
+    ])
+  })
+
+  it("starts the newest range at now when now is exactly 00:00 UTC", async () => {
+    vi.setSystemTime(Date.parse("2026-11-25T00:00:00.000Z"))
+    const { ctx, eventBodies } = setup((opts) => usageEventsResponse(opts, []))
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+
+    expect(eventBodies.slice(0, 2)).toEqual([
+      range("2026-11-25T00:00:00.000Z", "2026-11-25T00:00:00.000Z"),
+      range("2026-11-18T00:00:00.000Z", "2026-11-24T23:59:59.999Z"),
+    ])
+  })
+
+  it("stops at a failed range and marks the event sample incomplete", async () => {
+    const failed = String(Date.parse("2026-11-18T00:00:00.000Z"))
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === failed
+        ? { status: 500, bodyText: JSON.stringify({ error: "boom" }) }
+        : usageEventsResponse(opts, [todayEvent]))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.startDate)).toEqual([String(Date.parse("2026-11-25T00:00:00.000Z")), failed])
+    expect(lineValue(result, "Last 7 Days")).toBe("$1.00 · 1 calls · 1K tokens · partial")
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("treats an empty object as an empty range, as the API answers ranges without events", async () => {
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === String(Date.parse("2026-11-25T00:00:00.000Z"))
+        ? { status: 200, bodyText: "{}" }
+        : usageEventsResponse(opts, [{ ...todayEvent, timestamp: String(Date.parse("2026-11-20T08:00:00.000Z")) }]))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(3)
+    expect(lineValue(result, "Last 7 Days")).toBe("$1.00 · 1 calls · 1K tokens")
+    expect(lineValue(result, "Events Note")).toBeUndefined()
+  })
+
+  it("stops at a response whose usageEventsDisplay is not a list and marks the sample incomplete", async () => {
+    const invalid = String(Date.parse("2026-11-18T00:00:00.000Z"))
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === invalid
+        ? { status: 200, bodyText: JSON.stringify({ usageEventsDisplay: "unexpected" }) }
+        : usageEventsResponse(opts, [todayEvent]))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(2)
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("marks the sample incomplete when the total changes between pages", async () => {
+    const { ctx, eventBodies } = setup((opts) => {
+      const body = JSON.parse(opts.bodyText)
+      const count = body.page === 1 ? 1000 : 500
+      return {
+        status: 200,
+        bodyText: JSON.stringify({
+          totalUsageEventsCount: body.page === 1 ? 1500 : 1501,
+          usageEventsDisplay: Array.from({ length: count }, () => todayEvent),
+        }),
+      }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.page)).toEqual([1, 2])
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("marks the sample incomplete when a range returns more events than its total", async () => {
+    const { ctx, eventBodies } = setup(() => ({
+      status: 200,
+      bodyText: JSON.stringify({ totalUsageEventsCount: 1, usageEventsDisplay: [todayEvent, todayEvent] }),
+    }))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(1)
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("stops starting requests after the 15 s events deadline and caps each request timeout", async () => {
+    const { ctx, eventBodies, eventTimeouts } = setup((opts) => {
+      vi.setSystemTime(Date.now() + 8000)
+      return usageEventsResponse(opts, [todayEvent])
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(2)
+    expect(eventTimeouts).toEqual([15000, 7000])
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("applies the first page total to later pages", async () => {
+    const { ctx, eventBodies } = setup((opts) => {
+      const body = JSON.parse(opts.bodyText)
+      return {
+        status: 200,
+        bodyText: JSON.stringify(body.page === 1
+          ? { totalUsageEventsCount: 1400, usageEventsDisplay: Array.from({ length: 1000 }, () => todayEvent) }
+          : { usageEventsDisplay: Array.from({ length: 500 }, () => todayEvent) }),
+      }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.page)).toEqual([1, 2])
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it.each([
+    ["an error object", JSON.stringify({ error: "boom" })],
+    ["a list", JSON.stringify([])],
+  ])("marks the sample incomplete when a range answers with %s", async (_name, bodyText) => {
+    const second = String(Date.parse("2026-11-18T00:00:00.000Z"))
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === second
+        ? { status: 200, bodyText }
+        : usageEventsResponse(opts, [todayEvent]))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(2)
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("marks the sample incomplete when a later page is an empty object", async () => {
+    const { ctx, eventBodies } = setup((opts) => {
+      const body = JSON.parse(opts.bodyText)
+      return {
+        status: 200,
+        bodyText: body.page === 1
+          ? JSON.stringify({ totalUsageEventsCount: 1500, usageEventsDisplay: Array.from({ length: 1000 }, () => todayEvent) })
+          : "{}",
+      }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.page)).toEqual([1, 2])
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("caps the events deadline at 25 s after the probe start", async () => {
+    const { ctx, eventTimeouts } = setup((opts) => usageEventsResponse(opts, [todayEvent]))
+    const answer = ctx.host.http.request.getMockImplementation()
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("GetCurrentPeriodUsage")) vi.setSystemTime(Date.now() + 20000)
+      return answer(opts)
+    })
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+
+    expect(eventTimeouts[0]).toBe(5000)
   })
 })

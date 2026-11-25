@@ -291,6 +291,50 @@ describe("OpenUsagePluginProvider token ingestion", () => {
     expect(tokenRecords(records)).toEqual([]);
   });
 
+  test("does not emit a Cursor daily record for a day the events query starts inside", async () => {
+    const provider = new OpenUsagePluginProvider({
+      providerId: "cursor:work",
+      name: "Cursor Work",
+      pluginId: "cursor",
+      scriptText: `
+        globalThis.__openusage_plugin = {
+          id: "cursor",
+          probe(ctx) {
+            ctx.host.http.request({
+              method: "POST",
+              url: "https://cursor.com/api/dashboard/get-filtered-usage-events",
+              bodyText: JSON.stringify({
+                startDate: String(Date.parse("2026-08-08T07:30:00.000Z")),
+                endDate: String(Date.parse("2026-08-09T10:00:00.000Z")),
+                page: 1,
+                pageSize: 1000,
+              }),
+            });
+            return { lines: [] };
+          },
+        };
+      `,
+      request: () => ({
+        status: 200,
+        headers: {},
+        bodyText: JSON.stringify({
+          totalUsageEventsCount: 2,
+          usageEventsDisplay: [
+            { timestamp: "2026-08-08T09:30:00.000Z", model: "composer-2", tokenUsage: { totalTokens: 165 } },
+            { timestamp: "2026-08-09T09:30:00.000Z", model: "composer-2", tokenUsage: { totalTokens: 20 } },
+          ],
+        }),
+      }),
+      now: () => "2026-08-09T10:00:00.000Z",
+    });
+
+    const records = await provider.refresh();
+
+    expect(tokenRecords(records).map((record) => [record.startedAt, record.totalTokens])).toEqual([
+      ["2026-08-09T00:00:00.000Z", 20],
+    ]);
+  });
+
   test("skips ccusage token rows when session recording is disabled", async () => {
     let queries = 0;
     const provider = new OpenUsagePluginProvider({
