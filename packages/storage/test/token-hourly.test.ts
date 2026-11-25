@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -99,6 +99,157 @@ describe("token_hourly storage", () => {
     const rows = db.query("SELECT total_tokens FROM token_hourly").all();
     db.close();
     expect(rows).toEqual([{ total_tokens: 50 }]);
+  });
+});
+
+describe("token_hourly rows of a replaced day", () => {
+  const hourlyRows = (path: string) => {
+    const db = new Database(path, { readonly: true });
+    const rows = db.query("SELECT provider_id, tool, hour_start, model, total_tokens FROM token_hourly ORDER BY provider_id, tool, hour_start, model").all();
+    db.close();
+    return rows;
+  };
+
+  test("a replaced complete Cursor day loses the hours and models the batch no longer has", async () => {
+    const path = join(dataDir, "replace.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-16T00:00:00.000Z";
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      daily({ id: "d-old", providerId: "cursor", tool, source: "api", startedAt: day, model: "helios-alpha", totalTokens: 13 }),
+      hourly({ id: "h-old-0", providerId: "cursor", tool, source: "api", startedAt: day, model: "helios-alpha", totalTokens: 9 }),
+      hourly({ id: "h-old-4", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T04:00:00.000Z", model: "helios-alpha", totalTokens: 4 }),
+    ], { replaceScopes: true });
+    await storage.upsertUsageRecords([
+      daily({ id: "d-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9, completeDay: true }),
+      hourly({ id: "h-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toEqual([
+      { provider_id: "cursor", tool, hour_start: day, model: "Other", total_tokens: 9 },
+    ]);
+  });
+
+  test("keeps Grok hourly rows upsert-only, since a scan can skip an unreadable transcript", async () => {
+    const path = join(dataDir, "grok.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-16T00:00:00.000Z";
+    const tool = "Grok Session";
+    await storage.upsertUsageRecords([
+      daily({ id: "d-g", providerId: "grok", tool, source: "local-log", startedAt: day, totalTokens: 15 }),
+      hourly({ id: "h-g-9", providerId: "grok", tool, source: "local-log", startedAt: "2026-11-16T09:00:00.000Z", totalTokens: 5 }),
+      hourly({ id: "h-g-10", providerId: "grok", tool, source: "local-log", startedAt: "2026-11-16T10:00:00.000Z", totalTokens: 10 }),
+    ], { replaceScopes: true });
+    await storage.upsertUsageRecords([
+      daily({ id: "d-g", providerId: "grok", tool, source: "local-log", startedAt: day, totalTokens: 10 }),
+      hourly({ id: "h-g-10", providerId: "grok", tool, source: "local-log", startedAt: "2026-11-16T10:00:00.000Z", totalTokens: 10 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(2);
+  });
+
+  test.each([
+    ["without completeDay keeps", undefined, 2],
+    ["with completeDay replaces", true, 1],
+  ] as const)("a Cursor daily row %s the day's hourly rows, however late it is written", async (_name, completeDay, rows) => {
+    const path = join(dataDir, `flag-${String(completeDay)}.sqlite`);
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-24T00:00:00.000Z";
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-old", providerId: "cursor", tool, source: "api", startedAt: "2026-11-24T23:00:00.000Z", model: "helios-alpha", totalTokens: 9 }),
+    ]);
+    // A batch fetched before midnight (no completeDay) can be written long after it.
+    setSystemTime(new Date("2026-11-26T00:00:00.000Z"));
+    try {
+      await storage.upsertUsageRecords([
+        daily({ id: "d-24", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9, ...(completeDay ? { completeDay } : {}) }),
+        hourly({ id: "h-new", providerId: "cursor", tool, source: "api", startedAt: "2026-11-24T23:00:00.000Z", model: "Other", totalTokens: 9 }),
+      ], { replaceScopes: true });
+    } finally {
+      setSystemTime();
+    }
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(rows);
+  });
+
+  test("does not delete hourly rows for a daily row that does not start at 00:00 UTC", async () => {
+    const path = join(dataDir, "not-midnight.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-17", providerId: "cursor", tool, source: "api", startedAt: "2026-11-17T05:00:00.000Z", totalTokens: 5 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-930", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T09:30:00.000Z", totalTokens: 7, completeDay: true }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(1);
+  });
+
+  test("keeps hourly rows of a day the batch does not replace", async () => {
+    const path = join(dataDir, "other-day.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const source = "api";
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-15", providerId: "cursor", tool, source, startedAt: "2026-11-15T23:00:00.000Z", totalTokens: 5 }),
+      hourly({ id: "h-17", providerId: "cursor", tool, source, startedAt: "2026-11-17T00:00:00.000Z", totalTokens: 3 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7, completeDay: true }),
+      hourly({ id: "h-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toEqual([
+      { provider_id: "cursor", tool, hour_start: "2026-11-15T23:00:00.000Z", model: "model", total_tokens: 5 },
+      { provider_id: "cursor", tool, hour_start: "2026-11-16T00:00:00.000Z", model: "model", total_tokens: 7 },
+      { provider_id: "cursor", tool, hour_start: "2026-11-17T00:00:00.000Z", model: "model", total_tokens: 3 },
+    ]);
+  });
+
+  test("keeps hourly rows when the batch has hourly rows but no daily row for that day", async () => {
+    const path = join(dataDir, "no-daily.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-05", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T05:00:00.000Z", totalTokens: 5 }),
+    ]);
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-09", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T09:00:00.000Z", totalTokens: 9 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(2);
+  });
+
+  test("keeps ccusage hourly rows when its daily scope is replaced", async () => {
+    const path = join(dataDir, "ccusage.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-16T00:00:00.000Z";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-cc", providerId: "claude-code", tool: "ccusage", source: "local-log", startedAt: "2026-11-16T03:00:00.000Z", model: "All Models", totalTokens: 30 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-cc", providerId: "claude-code", tool: "ccusage", source: "local-log", startedAt: day, totalTokens: 40 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toEqual([
+      { provider_id: "claude-code", tool: "ccusage", hour_start: "2026-11-16T03:00:00.000Z", model: "All Models", total_tokens: 30 },
+    ]);
   });
 });
 

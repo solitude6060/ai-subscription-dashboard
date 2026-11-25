@@ -90,6 +90,8 @@ export function getConfigPath(): string {
   return join(getOpenUsageDir(), "config.json");
 }
 
+const DAY_MS = 86_400_000;
+
 export class SqliteStorage implements Storage {
   private db: Database | null = null;
 
@@ -288,6 +290,10 @@ export class SqliteStorage implements Storage {
       DELETE FROM usage_records
       WHERE provider_id = ? AND tool = ? AND started_at = ? AND source = ?
     `);
+    const deleteHourlyDay = db.prepare(`
+      DELETE FROM token_hourly
+      WHERE provider_id = ? AND tool = ? AND hour_start >= ? AND hour_start < ?
+    `);
     const deletePreviousPiOwners = db.prepare(`
       DELETE FROM usage_records
       WHERE (? IS NULL OR provider_id != ?) AND (provider_id = ? OR provider_id GLOB ?)
@@ -306,8 +312,9 @@ export class SqliteStorage implements Storage {
     const transaction = db.transaction((all: UsageRecord[]) => {
       // Hourly records feed only Allowance. They never enter usage_records or its replaceScopes delete.
       const items: UsageRecord[] = [];
+      const hours: UsageRecord[] = [];
       for (const record of all) {
-        if (isHourlyTokenRecord(record)) upsertHourly(record);
+        if (isHourlyTokenRecord(record)) hours.push(record);
         else items.push(record);
       }
       if (options.replaceScopes) {
@@ -349,8 +356,22 @@ export class SqliteStorage implements Storage {
           if (scopes.has(scope)) continue;
           scopes.add(scope);
           deleteScope.run(record.providerId, record.tool, record.startedAt, record.source);
+          // A daily row whose source covered the whole UTC day (completeDay, set by the Cursor collector)
+          // also replaces that day's hourly rows, so an hour or model the source no longer reports does
+          // not stay in Allowance. Other rows, including today's partial Cursor day and any batch fetched
+          // before midnight, keep hourly rows upsert-only.
+          const dayStart = Date.parse(record.startedAt);
+          if (record.completeDay === true && Number.isFinite(dayStart) && dayStart % DAY_MS === 0) {
+            deleteHourlyDay.run(
+              record.providerId,
+              record.tool,
+              new Date(dayStart).toISOString(),
+              new Date(dayStart + DAY_MS).toISOString(),
+            );
+          }
         }
       }
+      for (const record of hours) upsertHourly(record);
       for (const record of items) {
         insert.run(
           record.id,
