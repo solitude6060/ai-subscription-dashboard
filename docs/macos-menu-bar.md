@@ -6,8 +6,9 @@ backend. The menu app has its own bundle identity and needs no aisubdash account
 
 ## Build And Open
 
-On macOS 14 or later, install the Xcode Command Line Tools if `swift --version` is
-unavailable. Run these commands from the repository root.
+The app runs on macOS 14 or later. To build with the macOS 27.2 SDK, install
+full Xcode. The SwiftUI build needs `libSwiftUIMacros.dylib`, which ships only
+with Xcode. Run these commands from the repository root.
 
 ```sh
 bash apps/macos/build-app.sh "$HOME/Applications"
