@@ -172,7 +172,7 @@ implementer's sandbox, which could not run Swift builds.
 
 | Finding | Repair | Evidence before the repair | Files | Commits |
 | --- | --- | --- | --- | --- |
-| F1 Reading time after a failed refresh | `ProviderStatus.lastSuccessAt`: stored in `provider_status.last_success_at` (guarded `ALTER TABLE` for existing databases, kept by `COALESCE` when a caller omits it), set on the refresh success path only. The decoder uses it when present and otherwise keeps the earlier rule. | At `5467ced` the Swift suite has 1 assertion failure; the implementer reported 3 failing Bun assertions. | `packages/core/src/types.ts`, `packages/storage/src/sqlite-storage.ts`, `apps/server/src/index.ts`, `apps/server/src/provider-accounts.ts`, `apps/macos/Sources/AisubdashCore/UsageModels.swift`, `docs/local-http-api.md`, `docs/macos-menu-bar.md` | Test `5467ced`, fix `72857fa` |
+| F1 Reading time after a failed refresh | `ProviderStatus.lastSuccessAt`: stored in `provider_status.last_success_at` (guarded `ALTER TABLE` for existing databases, kept by `COALESCE` when a caller omits it), set on the refresh success path only. The decoder uses it when present and otherwise keeps the earlier rule. (Superseded by round 2 below: storage dates any error-free write as a success and never moves the value backwards.) | At `5467ced` the Swift suite has 1 assertion failure; the implementer reported 3 failing Bun assertions. | `packages/core/src/types.ts`, `packages/storage/src/sqlite-storage.ts`, `apps/server/src/index.ts`, `apps/server/src/provider-accounts.ts`, `apps/macos/Sources/AisubdashCore/UsageModels.swift`, `docs/local-http-api.md`, `docs/macos-menu-bar.md` | Test `5467ced`, fix `72857fa` |
 | F2 Pin removed with the Tailscale address | `updateTailscaleOrigin` keeps the `pinsByOrigin` entry. | At `980a8ba`: 2 assertion failures. | `DashboardStore.swift`, `docs/macos-menu-bar.md` | Test `980a8ba`, fix `e6dbfe1` |
 | F3 Dollar limit absent from the card; F7 no `compactValue` tests | `QuotaFormatter.cardValue` prints `$used / $limit` for dollar quotas and is used for the card value and its VoiceOver label; the menu bar keeps `compactValue`. | At `8b7fd0b`: 1 assertion failure. | `QuotaFormatter.swift`, `AccountCardView.swift` | Test `8b7fd0b`, fix `4d57c31` |
 | F4 `awk` exits before `otool` finishes | The `awk` program reads to end of input, resets at each `Load command`, and prints the first `sdk` of `LC_BUILD_VERSION`. | No test harness for the script. The implementer reproduced pipeline status 141 with a long input. | `apps/macos/build-app.sh` | Fix `e2ada6f` |
@@ -207,3 +207,11 @@ includes `lastSuccessAt`.
 
 CI on `154535e` (first run on `macos-15` with the linker flags): `Native Build and API Smoke
 Test` and `Lint, Type-check, Build, Test` passed.
+
+### Remediation re-review, round 3 (2026-11-25)
+
+Target `ef82ff1..04ed807`, head `04ed8071`. Details in
+`docs/reviews/2026-11-25-macos-menu-bar-triple-review.md`. Three APPROVE verdicts. Two LOW
+findings from the Claude lane: the F1 row above described the round-1 rule (note added), and a
+success time written while the system clock ran fast stays until real time passes it (accepted;
+the value is corrected by the next refresh after that time). CI on `04ed807`: both jobs passed.

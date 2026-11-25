@@ -49,3 +49,27 @@ Pull request 71 now targets `main`, so the macOS workflow runs on its next push.
 
 The repairs land on the branch of pull request 71, which contains pull request 69. The
 remediation diff is re-reviewed by the same three lanes.
+
+## Remediation re-reviews
+
+Round 2, target `ef82ff1..154535e`: lane 1 REQUEST_CHANGES (two MEDIUM findings on `lastSuccessAt`),
+lane 2 APPROVE (two LOW), lane 3 no review (Codex returned "You've hit your usage limit ... try
+again at 8:54 PM"). Findings and repairs are in the fix log. Transcripts: `reviews/pr71-triple-r2/`.
+
+Round 3, target `ef82ff1..04ed807`, head `04ed807` (full hash in `git log`):
+
+| Lane | Client and model | Effort | Verdict |
+| --- | --- | --- | --- |
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, no findings |
+| 2 | AGY `gemini-4-neon-high` (without `bwrap`; `git status` clean afterwards) | high | APPROVE, no findings |
+| 3 | Claude Code `claude-opus-5-5`, advisor `claude-opus-5-5` | high | APPROVE, 2 LOW |
+
+Lane 3 substitution: the fixed lane (Codex `gpt-6.2-sol`) was unavailable because of the recorded
+usage limit. Under the registry's unused-family rule it was replaced by Claude Code Opus 5.5, so
+the three lanes are xAI, Google and Anthropic. The orchestrator is also Anthropic (Fable 5.2).
+Lane 3 limit: the call shape allows `Read`, `Grep` and `Glob` only, and reading the stored diff
+files outside the worktree was denied, so that lane checked each repair in the source files at
+`04ed807` and did not read the diff hunks. Transcripts: `reviews/pr71-triple-r3/`.
+
+Result: three APPROVE verdicts on `04ed807`; no unresolved CRITICAL, HIGH or MEDIUM finding.
+Later commits that change only review records and fix logs keep this approval.
