@@ -205,8 +205,12 @@ async function killProcessTree(rootPid: number): Promise<void> {
   killTargets(rootPid, targets, "SIGKILL");
 }
 
-async function listDescendantPids(rootPid: number): Promise<number[]> {
-  const ps = Bun.spawn(["ps", "-eo", "pid=,ppid="], {
+export async function listDescendantPids(
+  rootPid: number,
+  psCommand = ["ps", "-eo", "pid=,ppid="],
+  timeoutMs = 2_000,
+): Promise<number[]> {
+  const ps = Bun.spawn(psCommand, {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",

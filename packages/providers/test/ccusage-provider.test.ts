@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { unlink } from "node:fs/promises";
 import {
   CcusageProvider,
+  listDescendantPids,
   runCcusageCommand,
   type CcusageCommandRunner,
 } from "../src/providers/ccusage";
@@ -150,6 +151,13 @@ describe("CcusageProvider", () => {
     );
 
     await expect(provider.detect()).resolves.toBe(false);
+  });
+
+  test("descendant listing gives up when the process listing does not finish", async () => {
+    const started = Date.now();
+
+    await expect(listDescendantPids(1, ["sleep", "3"], 100)).resolves.toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1_500);
   });
 
   test("default command runner handles missing executables", async () => {
