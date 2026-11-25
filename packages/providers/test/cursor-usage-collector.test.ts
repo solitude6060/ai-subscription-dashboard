@@ -29,7 +29,7 @@ describe("CursorUsageCollector per query", () => {
   test("emits no record for the day or hours before a query start inside a day", () => {
     const collector = new CursorUsageCollector();
     collector.capture(200, page([
-      event("2026-11-16T05:10:00.000Z", 100),
+      event("2026-11-16T07:45:00.000Z", 100),
       event("2026-11-16T09:10:00.000Z", 20),
       event("2026-11-17T01:10:00.000Z", 3),
     ], 3), request("2026-11-16T07:30:00.000Z", "2026-11-17T12:00:00.000Z"));

@@ -146,6 +146,12 @@ export class CursorUsageCollector {
     const completeDays = new Map<string, boolean>();
     for (const query of this.queries.values()) {
       if (query.failed || !query.complete) continue;
+      // A query with an explicit range that returns an event outside it is not trusted for any day.
+      if (Number.isFinite(query.start) && Number.isFinite(query.end) && query.events.some((event) => {
+        const timestamp = eventTimestamp(event.timestamp);
+        const time = timestamp ? Date.parse(timestamp) : Number.NaN;
+        return Number.isFinite(time) && (time < query.start || time > query.end);
+      })) continue;
       for (const event of query.events) {
         if (!isObject(event.tokenUsage)) continue;
         const timestamp = eventTimestamp(event.timestamp);

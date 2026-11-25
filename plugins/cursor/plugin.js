@@ -649,17 +649,19 @@
     var session = buildSessionToken(ctx, accessToken)
     if (!session) {
       ctx.host.log.warn("usage events: cannot build session token")
-      return { events: [], truncated: false, incomplete: true }
+      return { events: [], truncated: false, incomplete: true, deadline: false }
     }
     var all = []
     var truncated = false
     var incomplete = false
+    var deadline = false
     var expectedTotal = null
     for (var page = 1; page <= EVENTS_MAX_PAGES; page++) {
       var remainingMs = deadlineMs - Date.now()
       if (remainingMs <= 0) {
         ctx.host.log.warn("usage events: deadline reached")
         incomplete = true
+        deadline = true
         break
       }
       try {
@@ -709,7 +711,8 @@
           break
         }
         if (batch.length < EVENTS_PAGE_SIZE) {
-          if (expectedTotal != null && all.length < expectedTotal) truncated = true
+          // A short page before the known total is an inconsistent answer, not the page limit.
+          if (expectedTotal != null && all.length < expectedTotal) incomplete = true
           break
         }
         if (expectedTotal != null && all.length >= expectedTotal) break
@@ -722,7 +725,7 @@
         break
       }
     }
-    return { events: all, truncated: truncated, incomplete: incomplete }
+    return { events: all, truncated: truncated, incomplete: incomplete, deadline: deadline }
   }
 
   function appendUsageEventBreakdown(ctx, lines, accessToken, usage) {
@@ -745,17 +748,23 @@
       for (var rangeEnd = todayStart; rangeEnd > firstDay; rangeEnd -= EVENTS_RANGE_DAYS * DAY_MS) {
         ranges.push([Math.max(firstDay, rangeEnd - EVENTS_RANGE_DAYS * DAY_MS), rangeEnd - 1])
       }
-      var fetched = { events: [], truncated: false, incomplete: false }
+      var fetched = { events: [], truncated: false, incomplete: false, deadline: false }
       for (var r = 0; r < ranges.length; r++) {
         var part = fetchFilteredUsageEvents(ctx, accessToken, ranges[r][0], ranges[r][1], deadline)
         for (var d = 0; d < part.events.length; d++) fetched.events.push(part.events[d])
         if (part.truncated || part.incomplete) {
           fetched.truncated = part.truncated
           fetched.incomplete = part.incomplete
+          fetched.deadline = part.deadline
           break
         }
       }
-      if (!fetched.events.length) return
+      if (!fetched.events.length) {
+        // An HTTP failure with no events (for example an account without event access) shows no event
+        // lines; a spent time budget says why the breakdown is missing.
+        if (fetched.deadline) lines.push(ctx.line.text({ label: "Events Note", value: "Partial sample (time limit)" }))
+        return
+      }
 
       var last7 = []
       var cycle = []
@@ -791,7 +800,12 @@
           "From Cursor usage events (API price / tokens).",
         )
       }
-      if (fetched.incomplete) {
+      if (fetched.deadline) {
+        lines.push(ctx.line.text({
+          label: "Events Note",
+          value: "Partial sample (time limit)",
+        }))
+      } else if (fetched.incomplete) {
         lines.push(ctx.line.text({
           label: "Events Note",
           value: "Partial sample (incomplete fetch)",

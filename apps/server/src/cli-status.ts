@@ -64,6 +64,26 @@ function progressBar(used: number, limit: number): string {
   return `${bg}${" ".repeat(filled)}${BG_BAR}${" ".repeat(empty)}${RESET}`;
 }
 
+type ServerRefreshResult = { providerId: string; ok: boolean; records?: number; error?: string };
+
+// The WebUI server refreshes the same database through its own queue. A second writer can commit an
+// older batch after a newer one, so a running server on this database does the refresh instead.
+async function refreshThroughServer(): Promise<ServerRefreshResult[] | null> {
+  const base = `http://127.0.0.1:${Number(process.env.OPENUSAGE_WEBUI_PORT ?? 6736)}`;
+  try {
+    const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2000) });
+    if (!health.ok) return null;
+    const info = (await health.json()) as { databasePath?: unknown };
+    if (info.databasePath !== getDatabasePath()) return null;
+  } catch {
+    return null;
+  }
+  const response = await fetch(`${base}/api/providers/refresh`, { method: "POST" });
+  if (!response.ok) throw new Error(`WebUI server refresh returned HTTP ${response.status}`);
+  const body = (await response.json()) as { results?: ServerRefreshResult[] };
+  return Array.isArray(body.results) ? body.results : [];
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return Boolean(v) && typeof v === "object" && !Array.isArray(v);
 }
@@ -74,7 +94,15 @@ async function main() {
   const storage = new SqliteStorage();
   await storage.init();
 
-  if (doRefresh) {
+  const serverResults = doRefresh ? await refreshThroughServer() : null;
+  if (serverResults) {
+    console.log(`${DIM}Refreshed through the WebUI server:${RESET}`);
+    for (const result of serverResults) {
+      const detail = result.ok ? `${result.records ?? 0} records` : (result.error ?? "failed");
+      console.log(`  ${result.ok ? GREEN : RED}${result.providerId}${RESET} ${DIM}${detail}${RESET}`);
+    }
+    console.log("");
+  } else if (doRefresh) {
     console.log(`${DIM}Refreshing providers...${RESET}`);
     const providers = getProviders();
     const statusMap = new Map(
