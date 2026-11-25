@@ -18,6 +18,7 @@ import type { Storage } from "./storage";
 import { codexSessionAccountGroups } from "../../providers/src/codex-session-ownership";
 import type { QuotaLimitUnit, QuotaObservation } from "../../providers/src/quota-observations";
 import {
+  DAILY_TOKEN_TOOLS,
   TOKEN_HOURLY_SCHEMA,
   isHourlyTokenRecord,
   listAllowanceRows,
@@ -89,6 +90,8 @@ export function getDatabasePath(): string {
 export function getConfigPath(): string {
   return join(getOpenUsageDir(), "config.json");
 }
+
+const UTC_DAY_HOURLY_TOOLS = DAILY_TOKEN_TOOLS.filter((tool) => tool !== "ccusage");
 
 export class SqliteStorage implements Storage {
   private db: Database | null = null;
@@ -288,6 +291,10 @@ export class SqliteStorage implements Storage {
       DELETE FROM usage_records
       WHERE provider_id = ? AND tool = ? AND started_at = ? AND source = ?
     `);
+    const deleteHourlyDay = db.prepare(`
+      DELETE FROM token_hourly
+      WHERE provider_id = ? AND tool = ? AND hour_start >= ? AND hour_start < ?
+    `);
     const deletePreviousPiOwners = db.prepare(`
       DELETE FROM usage_records
       WHERE (? IS NULL OR provider_id != ?) AND (provider_id = ? OR provider_id GLOB ?)
@@ -306,8 +313,9 @@ export class SqliteStorage implements Storage {
     const transaction = db.transaction((all: UsageRecord[]) => {
       // Hourly records feed only Allowance. They never enter usage_records or its replaceScopes delete.
       const items: UsageRecord[] = [];
+      const hours: UsageRecord[] = [];
       for (const record of all) {
-        if (isHourlyTokenRecord(record)) upsertHourly(record);
+        if (isHourlyTokenRecord(record)) hours.push(record);
         else items.push(record);
       }
       if (options.replaceScopes) {
@@ -349,8 +357,19 @@ export class SqliteStorage implements Storage {
           if (scopes.has(scope)) continue;
           scopes.add(scope);
           deleteScope.run(record.providerId, record.tool, record.startedAt, record.source);
+          // A replaced UTC day also replaces its hourly rows, so an hour or model the batch no longer
+          // has does not stay in Allowance. ccusage hours pair with local days and stay upsert-only.
+          if (UTC_DAY_HOURLY_TOOLS.includes(record.tool)) {
+            deleteHourlyDay.run(
+              record.providerId,
+              record.tool,
+              record.startedAt,
+              new Date(Date.parse(record.startedAt) + 86_400_000).toISOString(),
+            );
+          }
         }
       }
+      for (const record of hours) upsertHourly(record);
       for (const record of items) {
         insert.run(
           record.id,
