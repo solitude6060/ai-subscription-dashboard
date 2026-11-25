@@ -39,3 +39,21 @@ Lane 3 thread `01a21337-f6a9-7e33-8fcc-9021e237d64b`.
 | H2-1 | A refresh that fetched today before UTC midnight and writes after it counts the day as closed and replaces its hourly rows with a partial batch. | Lanes 1, 2 (LOW), lane 3 (MEDIUM) | MEDIUM | Fixed: a day counts as closed 10 minutes after it ends; the plugin worker stops a refresh at 120 s. Test first (9 and 10 minutes, pinned clock). The daily row in the same race (an earlier batch replacing a later daily total) is the existing daily behavior and is restored by the next refresh; not changed here. |
 | H2-2 | The today test read the wall clock. | Lanes 2, 3 | LOW | Fixed: replaced by pinned-clock tests. |
 | H2-3 | The plan's exit criterion named the wrong baseline for the remediation tests. | Lane 3 | LOW | Fixed: each test names its baseline. |
+
+## Round 3 (second remediation re-review)
+
+- Reviewed `dd82ec60..c8699263` (review records excluded). Prompt `pr74-round3/prompt.md` (SHA-256 `94d7b4fe…b7c4b66`).
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, no findings | `pr74-round3/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` | high | APPROVE, 2 LOW | `pr74-round3/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, `~/.codex-family` | high | REQUEST_CHANGES, 1 MEDIUM, 1 LOW | `pr74-round3/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 3 thread `01a21343-075f-7173-a2c6-00628283849b`.
+
+| ID | Finding | Source | Severity | Disposition |
+|---|---|---|---|---|
+| H3-1 | A writer that pauses more than 10 minutes between a pre-midnight fetch and its write can still replace a full day's hourly rows. | Lane 3 | MEDIUM | Fixed at the root, as lane 3 proposed in round 2: the collector marks daily rows whose query covered the whole UTC day (`completeDay`), and storage replaces hourly rows only for those. The clock rule and the Cursor allowlist are removed. Tests first. |
+| H3-2 | Docs omit the previous day's grace period. | Lanes 2, 3 | LOW | Superseded: the docs now describe the coverage rule. |
+| H3-3 | The plan's baselines named a removed today test. | Lane 2 | LOW | Fixed: baselines rewritten for the current tests. |
