@@ -1,0 +1,122 @@
+# Google Colab compute units provider
+
+Date: 2026-11-25. Branch: `feat/colab-compute-units` (from `main` at `5e54e99`).
+
+## Goal
+
+Show the Google Colab compute-unit balance in the WebUI dashboard. The backend reads it from
+the Colab CLI on the machine where the backend runs.
+
+## Source
+
+`google-colab-cli` (installed with `uv tool`, executable `colab`). On the owner's Linux host
+the executable is `~/.local/bin/colab`; that directory is not on the `PATH` of a
+non-interactive shell. `colab usage` is read-only. Observed on 2026-11-25 (exit code 0,
+plain text on stdout, empty stderr, no JSON option in `colab usage --help`):
+
+```
+Current balance: 341.98 compute units
+Usage rate: 0.00/hr
+Active assignments: 0
+```
+
+The balance has no limit and no reset time.
+
+## Scope
+
+In scope: a native backend provider, its WebUI listing, tests and documentation.
+
+Out of scope:
+
+- The macOS menu bar panel. Its decoder keeps progress lines only, so a Colab account shows
+  "No quota reported" there. Text-line support is a follow-up after the panel pull request
+  merges.
+- Kaggle, AI Studio and Jev. No documented quota or balance interface was found for them.
+- Deployment to the always-on service, which needs owner approval (`README_WEBUI.md`).
+
+## Design
+
+Provider id `colab`, name `Google Colab`, class `ColabProvider` in
+`packages/providers/src/providers/colab.ts`. It follows the two existing native providers:
+dependency injection as in `MiniMaxProvider`, command execution as in `CcusageProvider`.
+
+Executable lookup, in order: the `COLAB_CLI_PATH` environment variable when set; `colab` on
+`PATH`; `$HOME/.local/bin/colab`. `detect()` returns whether one of these resolves to an
+existing executable. It runs no command.
+
+`refresh()` runs `<executable> usage` with stdin ignored and a 20 second timeout. The command
+runner is injected through the constructor. The spawn, timeout and kill logic of
+`runCcusageCommand` (`ccusage.ts`) is shared, not copied; its timeout message must name the
+command that ran.
+
+Parsing, line by line, case-sensitive labels as observed:
+
+| Line | Rule |
+| --- | --- |
+| `Current balance: <number> compute units` | Required. A missing or non-numeric value is an error. |
+| `Usage rate: <number>/hr` | Optional. |
+| `Active assignments: <integer>` | Optional. |
+
+Errors are thrown from `refresh()` with a message the Providers page can show: executable not
+found (names `COLAB_CLI_PATH`), command failed (includes the first line of stderr), timeout,
+and unrecognised output. No zero or cached value is substituted.
+
+`refresh()` returns one `UsageRecord`:
+
+- `id`: a fixed value derived from `"colab|usage"`, so each refresh updates one row.
+- `providerId: "colab"`, `tool: "OpenUsage Plugin Snapshot"` (the latest-snapshot query in
+  `sqlite-storage.ts` selects `raw.lines` records by this tool name), `source: "cli"`,
+  `startedAt`: the refresh time.
+- `raw.lines`: text lines, which the WebUI already renders (`usage-line.tsx`), as OpenRouter's
+  `Balance` line does.
+
+| Label | Value | Condition |
+| --- | --- | --- |
+| `Balance` | `341.98 compute units` | Always |
+| `Usage Rate` | `0.00 units/hr` | When the rate line is present |
+| `Time Left` | hours as `balance / rate`, one decimal, for example `12.3 h` | When the rate is greater than 0 |
+| `Active Sessions` | `0` | When the assignments line is present |
+
+No token or cost fields are set, so usage summaries are unchanged.
+
+## Files
+
+| File | Change |
+| --- | --- |
+| `packages/core/src/types.ts` | Add `"colab"` to `PROVIDER_IDS` |
+| `packages/providers/src/providers/colab.ts` | New provider |
+| `packages/providers/src/providers/ccusage.ts` | Share the command runner |
+| `packages/providers/src/index.ts`, `registry.ts` | Export and register |
+| `apps/web/src/provider-ui.ts` | Add to `providerCards` and `refreshableProviders` |
+| `apps/server/src/cli-status.ts` | Provider name |
+| `packages/providers/test/colab-provider.test.ts` | New tests |
+| `docs/providers/colab.md` | New provider document |
+| `README.md`, `README_WEBUI.md`, `README_WEBUI.zh-TW.md`, `docs/USER_GUIDE_WEBUI.zh-TW.md` | Supported-provider lists and a Colab note |
+
+## Tests
+
+Written before the implementation, each failing on an assertion first:
+
+1. The observed output yields the `Balance`, `Usage Rate` and `Active Sessions` lines and no
+   `Time Left` line.
+2. A rate greater than 0 adds `Time Left`.
+3. Output without the balance line throws; so does a non-numeric balance.
+4. A failed command and a timeout throw messages that name the cause.
+5. Executable lookup order, and `detect()` true and false.
+6. The record uses the fixed id, the snapshot tool name and `source: "cli"`.
+7. The registry returns a `ColabProvider`; the WebUI lists it as refreshable.
+8. A refresh through the server stores the record and `/api/usage/latest-snapshots` returns it.
+
+## Verification
+
+- `bun test packages/providers/test/colab-provider.test.ts`
+- `bun run test:webui` (on macOS run with `TMPDIR="$(realpath "$TMPDIR")"`; three unrelated
+  tests fail with the default value)
+- `bun run build:webui`
+- On the owner's Linux host after deployment: refresh Google Colab and compare the dashboard
+  with `colab usage`.
+
+## Exit criteria
+
+The tests above pass, the build passes, the documents listed are updated, and the review
+required by the project gate returns APPROVE.
