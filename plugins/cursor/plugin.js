@@ -722,6 +722,7 @@
       } catch (e) {
         ctx.host.log.warn("usage events fetch failed: " + String(e))
         incomplete = true
+        if (Date.now() >= deadlineMs) deadline = true
         break
       }
     }
