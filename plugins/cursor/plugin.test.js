@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { makeCtx } from "../test-helpers.js"
 
 const STATE_DB_MAC =
@@ -15,6 +15,22 @@ function makeJwt(payload) {
     .toString("base64")
     .replace(/=+$/g, "")
   return `a.${jwtPayload}.c`
+}
+
+// Answers get-filtered-usage-events like the API: only events inside [startDate, endDate], paged by pageSize.
+function usageEventsResponse(opts, events) {
+  const body = JSON.parse(opts.bodyText)
+  const start = Number(body.startDate)
+  const end = Number(body.endDate)
+  const inRange = events.filter((event) => Number(event.timestamp) >= start && Number(event.timestamp) <= end)
+  const from = (body.page - 1) * body.pageSize
+  return {
+    status: 200,
+    bodyText: JSON.stringify({
+      totalUsageEventsCount: inRange.length,
+      usageEventsDisplay: inRange.slice(from, from + body.pageSize),
+    }),
+  }
 }
 
 describe("cursor plugin", () => {
@@ -2232,33 +2248,27 @@ describe("cursor plugin", () => {
         expect(opts.headers.Cookie).toContain("WorkosCursorSessionToken=user_abc123%3A%3A")
         const body = JSON.parse(opts.bodyText)
         expect(body.page).toBe(1)
-        expect(body.pageSize).toBe(200)
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            totalUsageEventsCount: 3,
-            usageEventsDisplay: [
-              {
-                timestamp: String(now - 2 * 24 * 60 * 60 * 1000),
-                model: "claude-4.6-opus-high-thinking",
-                chargedCents: 250,
-                tokenUsage: { totalTokens: 12000, totalCents: 250 },
-              },
-              {
-                timestamp: String(now - 3 * 24 * 60 * 60 * 1000),
-                model: "composer-2",
-                chargedCents: 100,
-                tokenUsage: { totalTokens: 4000, totalCents: 100 },
-              },
-              {
-                timestamp: String(now - 15 * 24 * 60 * 60 * 1000),
-                model: "claude-4.6-sonnet-medium-thinking",
-                chargedCents: 400,
-                tokenUsage: { totalTokens: 20000, totalCents: 400 },
-              },
-            ],
-          }),
-        }
+        expect(body.pageSize).toBe(1000)
+        return usageEventsResponse(opts, [
+          {
+            timestamp: String(now - 2 * 24 * 60 * 60 * 1000),
+            model: "claude-4.6-opus-high-thinking",
+            chargedCents: 250,
+            tokenUsage: { totalTokens: 12000, totalCents: 250 },
+          },
+          {
+            timestamp: String(now - 3 * 24 * 60 * 60 * 1000),
+            model: "composer-2",
+            chargedCents: 100,
+            tokenUsage: { totalTokens: 4000, totalCents: 100 },
+          },
+          {
+            timestamp: String(now - 15 * 24 * 60 * 60 * 1000),
+            model: "claude-4.6-sonnet-medium-thinking",
+            chargedCents: 400,
+            tokenUsage: { totalTokens: 20000, totalCents: 400 },
+          },
+        ])
       }
       return { status: 200, bodyText: "{}" }
     })
@@ -2304,20 +2314,14 @@ describe("cursor plugin", () => {
         }
       }
       if (url.includes("get-filtered-usage-events")) {
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            totalUsageEventsCount: 1,
-            usageEventsDisplay: [
-              {
-                timestamp: String(now - 60 * 60 * 1000),
-                model: "composer-2",
-                chargedCents: "175",
-                tokenUsage: { totalTokens: "2500", totalCents: "175" },
-              },
-            ],
-          }),
-        }
+        return usageEventsResponse(opts, [
+          {
+            timestamp: String(now - 60 * 60 * 1000),
+            model: "composer-2",
+            chargedCents: "175",
+            tokenUsage: { totalTokens: "2500", totalCents: "175" },
+          },
+        ])
       }
       return { status: 200, bodyText: "{}" }
     })
@@ -2351,7 +2355,7 @@ describe("cursor plugin", () => {
         const body = JSON.parse(opts.bodyText)
         if (body.page === 1) {
           const events = []
-          for (let i = 0; i < 200; i++) {
+          for (let i = 0; i < body.pageSize; i++) {
             events.push({
               timestamp: String(now - 60 * 60 * 1000),
               model: "composer-2",
@@ -2362,7 +2366,7 @@ describe("cursor plugin", () => {
           return {
             status: 200,
             bodyText: JSON.stringify({
-              totalUsageEventsCount: 450,
+              totalUsageEventsCount: 2 * body.pageSize + 50,
               usageEventsDisplay: events,
             }),
           }
@@ -2375,7 +2379,7 @@ describe("cursor plugin", () => {
     const plugin = await loadPlugin()
     const result = plugin.probe(ctx)
     expect(result.lines.find((line) => line.label === "Last 7 Days")?.value).toBe(
-      "$2.00 · 200 calls · 2K tokens · partial",
+      "$10.00 · 1000 calls · 10K tokens · partial",
     )
     expect(result.lines.find((line) => line.label === "Events Note")?.value).toBe(
       "Partial sample (incomplete fetch)",
@@ -2403,7 +2407,7 @@ describe("cursor plugin", () => {
       if (url.includes("get-filtered-usage-events")) {
         const body = JSON.parse(opts.bodyText)
         const events = []
-        for (let i = 0; i < 200; i++) {
+        for (let i = 0; i < body.pageSize; i++) {
           events.push({
             timestamp: String(now - 60 * 60 * 1000),
             model: "composer-2",
@@ -2414,7 +2418,7 @@ describe("cursor plugin", () => {
         return {
           status: 200,
           bodyText: JSON.stringify({
-            totalUsageEventsCount: 5000,
+            totalUsageEventsCount: 50000,
             usageEventsDisplay: events,
             page: body.page,
           }),
@@ -2450,20 +2454,14 @@ describe("cursor plugin", () => {
         }
       }
       if (url.includes("get-filtered-usage-events")) {
-        return {
-          status: 200,
-          bodyText: JSON.stringify({
-            totalUsageEventsCount: 1,
-            usageEventsDisplay: [
-              {
-                timestamp: String(now - 60 * 60 * 1000),
-                model: "composer-2",
-                chargedCents: 0,
-                tokenUsage: { totalTokens: 1000, totalCents: 250 },
-              },
-            ],
-          }),
-        }
+        return usageEventsResponse(opts, [
+          {
+            timestamp: String(now - 60 * 60 * 1000),
+            model: "composer-2",
+            chargedCents: 0,
+            tokenUsage: { totalTokens: 1000, totalCents: 250 },
+          },
+        ])
       }
       return { status: 200, bodyText: "{}" }
     })
@@ -2500,5 +2498,90 @@ describe("cursor plugin", () => {
     const result = plugin.probe(ctx)
     expect(result.lines.find((line) => line.label === "Total usage")).toBeTruthy()
     expect(result.lines.find((line) => line.label === "Last 7 Days")).toBeUndefined()
+  })
+})
+
+describe("cursor usage events per UTC day", () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const NOW = Date.parse("2026-11-25T12:00:00.000Z")
+  const CYCLE_START = Date.parse("2026-11-16T07:30:00.000Z")
+
+  beforeEach(() => {
+    delete globalThis.__openusage_plugin
+    vi.resetModules()
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(NOW)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function setup(eventsHandler) {
+    const ctx = makeCtx()
+    const accessToken = makeJwt({ sub: "google-oauth2|user_abc123", exp: 9999999999 })
+    ctx.host.sqlite.query.mockReturnValue(JSON.stringify([{ value: accessToken }]))
+    const eventBodies = []
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url.includes("GetCurrentPeriodUsage")) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({
+            enabled: true,
+            billingCycleStart: String(CYCLE_START),
+            billingCycleEnd: String(CYCLE_START + 30 * DAY),
+            planUsage: { totalSpend: 1200, limit: 2400, totalPercentUsed: 50 },
+          }),
+        }
+      }
+      if (url.includes("get-filtered-usage-events")) {
+        eventBodies.push(JSON.parse(opts.bodyText))
+        return eventsHandler(opts)
+      }
+      return { status: 200, bodyText: "{}" }
+    })
+    return { ctx, eventBodies }
+  }
+
+  it("fetches usage events one UTC day at a time, newest day first, from the window start day", async () => {
+    const { ctx, eventBodies } = setup((opts) => usageEventsResponse(opts, []))
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+
+    const expected = []
+    for (let start = Date.parse("2026-11-25T00:00:00.000Z"); start >= Date.parse("2026-11-16T00:00:00.000Z"); start -= DAY) {
+      expected.push({ startDate: String(start), endDate: String(Math.min(start + DAY - 1, NOW)), page: 1, pageSize: 1000 })
+    }
+    expect(eventBodies).toEqual(expected)
+  })
+
+  it("stops at a failed day and marks the event sample incomplete", async () => {
+    const failedDay = String(Date.parse("2026-11-24T00:00:00.000Z"))
+    const events = [{
+      timestamp: String(Date.parse("2026-11-25T08:00:00.000Z")),
+      model: "composer-2",
+      chargedCents: 100,
+      tokenUsage: { totalTokens: 1000 },
+    }]
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === failedDay
+        ? { status: 500, bodyText: JSON.stringify({ error: "boom" }) }
+        : usageEventsResponse(opts, events))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.startDate)).toEqual([
+      String(Date.parse("2026-11-25T00:00:00.000Z")),
+      failedDay,
+    ])
+    expect(result.lines.find((line) => line.label === "Last 7 Days")?.value).toBe(
+      "$1.00 · 1 calls · 1K tokens · partial",
+    )
+    expect(result.lines.find((line) => line.label === "Events Note")?.value).toBe(
+      "Partial sample (incomplete fetch)",
+    )
   })
 })
