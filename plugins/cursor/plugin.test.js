@@ -2599,11 +2599,25 @@ describe("cursor usage event ranges", () => {
     expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
   })
 
-  it("stops at a response without usageEventsDisplay and marks the sample incomplete", async () => {
+  it("treats an empty object as an empty range, as the API answers ranges without events", async () => {
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === String(Date.parse("2026-11-25T00:00:00.000Z"))
+        ? { status: 200, bodyText: "{}" }
+        : usageEventsResponse(opts, [{ ...todayEvent, timestamp: String(Date.parse("2026-11-20T08:00:00.000Z")) }]))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(3)
+    expect(lineValue(result, "Last 7 Days")).toBe("$1.00 · 1 calls · 1K tokens")
+    expect(lineValue(result, "Events Note")).toBeUndefined()
+  })
+
+  it("stops at a response whose usageEventsDisplay is not a list and marks the sample incomplete", async () => {
     const invalid = String(Date.parse("2026-11-18T00:00:00.000Z"))
     const { ctx, eventBodies } = setup((opts) =>
       JSON.parse(opts.bodyText).startDate === invalid
-        ? { status: 200, bodyText: JSON.stringify({ unexpected: true }) }
+        ? { status: 200, bodyText: JSON.stringify({ usageEventsDisplay: "unexpected" }) }
         : usageEventsResponse(opts, [todayEvent]))
 
     const plugin = await loadPlugin()
