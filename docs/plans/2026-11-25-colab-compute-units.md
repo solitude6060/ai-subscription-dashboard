@@ -78,7 +78,8 @@ nonblank stderr line), timeout, and unrecognised output. No zero or cached value
 | `Usage Rate` | `0.00 units/hr`. The finite estimate `balance / rate` is appended to one decimal place when the balance is non-negative and the rate is positive. Example: `3.00 units/hr, 12.3 h left` | When the rate line is present |
 | `Active Sessions` | `0` | When the assignments line is present |
 
-No token or cost fields are set, so usage summaries are unchanged.
+The snapshot leaves token and cost totals unchanged. Usage summary record counts include it,
+and `byProvider` includes a Colab entry, as with other provider snapshots.
 
 ## Files
 
