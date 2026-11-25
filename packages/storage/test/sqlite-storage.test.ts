@@ -158,6 +158,26 @@ describe("SqliteStorage", () => {
     }
   });
 
+  test("dates a status written without an error as a success", async () => {
+    // cli-status.ts and older callers write lastRefreshAt without lastSuccessAt.
+    const storage = new SqliteStorage();
+    await storage.init();
+    try {
+      const base = { providerId: "minimax", name: "MiniMax", enabled: true, detected: true };
+      await storage.upsertProviderStatus({ ...base, lastRefreshAt: "2026-11-22T06:18:00.000Z" });
+      expect((await storage.listProviderStatus())[0].lastSuccessAt).toBe("2026-11-22T06:18:00.000Z");
+
+      await storage.upsertProviderStatus({ ...base, lastRefreshAt: "2026-11-22T06:30:00.000Z" });
+      expect((await storage.listProviderStatus())[0].lastSuccessAt).toBe("2026-11-22T06:30:00.000Z");
+
+      await storage.upsertProviderStatus({ ...base, lastRefreshAt: "2026-11-22T06:40:00.000Z", lastError: "failed" });
+      await storage.upsertProviderStatus({ ...base, lastRefreshAt: "2026-11-22T06:18:00.000Z" });
+      expect((await storage.listProviderStatus())[0].lastSuccessAt).toBe("2026-11-22T06:30:00.000Z");
+    } finally {
+      storage.close();
+    }
+  });
+
   test("migrates an existing provider status table without losing rows", async () => {
     const db = new Database(getDatabasePath(), { create: true });
     db.exec(`
@@ -170,6 +190,7 @@ describe("SqliteStorage", () => {
         last_error TEXT
       );
       INSERT INTO provider_status VALUES ('minimax', 'MiniMax', 1, 1, '2026-11-22T06:18:00.000Z', NULL);
+      INSERT INTO provider_status VALUES ('zai', 'Z.ai', 1, 1, '2026-11-22T06:19:00.000Z', 'Provider refresh failed');
     `);
     db.close();
 
@@ -183,6 +204,14 @@ describe("SqliteStorage", () => {
           enabled: true,
           detected: true,
           lastRefreshAt: "2026-11-22T06:18:00.000Z",
+          lastSuccessAt: "2026-11-22T06:18:00.000Z",
+        }, {
+          providerId: "zai",
+          name: "Z.ai",
+          enabled: true,
+          detected: true,
+          lastRefreshAt: "2026-11-22T06:19:00.000Z",
+          lastError: "Provider refresh failed",
         }]);
       } finally {
         storage.close();

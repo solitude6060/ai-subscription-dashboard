@@ -7,6 +7,7 @@ final class QuotaFormatterTests: XCTestCase {
 
     func testCardValueShowsDollarLimitAndKeepsOtherFormats() {
         XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 50, limit: 60, format: .usd)), "$50.00 / $60.00")
+        XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 50, limit: 0, format: .usd)), "$50.00")
         XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 82, limit: 100)), "82%")
         XCTAssertEqual(QuotaFormatter.cardValue(quota(used: 8, limit: 10, format: .count(suffix: "requests"))), "8/10 requests")
     }
