@@ -47,9 +47,15 @@ R2-4, R2-6 and R2-7 (backfill script) move to `docs/reviews/2026-11-25-cursor-ba
 
 Real account after the round 2 repairs (`e2e-ranges-r2fix.txt`): 4 event requests, refresh 6.1 s; 2026-11-16..24 equal `e2e-ranges-r1fix2.txt`. Vitest 1397 passed; Bun 646 passed, 0 failed; `bun run build` and `build:webui` passed (`*-r2fix.log`).
 
+## Review Round 3
+
+Grok xhigh, Gemini 4 Neon high and Codex Sol high (`~/.codex-family`) APPROVE `d2de8c1b`. R3-1 (LOW) docs wording fixed; R3-2 and R3-3 (LOW) deferred.
+
 ## Deferred
 
 - R1-7 (LOW) and R2-5 collector part (MEDIUM): the collector filters by query start only, so overlapping queries or an event outside its query range would be counted in another day. No caller sends overlapping ranges, and every probed event was inside its range (`probe-days.txt`, `range-paging-check.txt`). The backfill script fails a day that contains an event outside it.
+- R3-2 (LOW): a short page below a known total shows `Partial sample (page cap)`; set `incomplete` instead.
+- R3-3 (LOW): no Events Note when the probe budget is spent before any event request.
 - Desktop limit: with 600+ events per day (2026-10 levels) the 15 s deadline can end the fetch before the oldest ranges; those ranges are then missing from the lines, and their stored rows keep the last complete values.
 
 ## Verification

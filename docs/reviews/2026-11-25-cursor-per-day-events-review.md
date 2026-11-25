@@ -58,3 +58,23 @@ Gate split: six of the lane 3 MEDIUM findings over both rounds concern `backfill
 | R2-6 | Backfill aborts on a JSON `null` body. | Lane 2, lane 3 | MEDIUM | `body.usageEventsDisplay` on `null` throws outside the per-day `try`. | Script review: require a plain object. |
 | R2-7 | Backfill counts zero-token `tokenUsage` objects as token events and can report a false collector rejection. | Lane 2 | LOW | `tokenEvents` counts any `tokenUsage` object; the collector skips zero totals. | Script review: count events with a positive total. |
 | R2-8 | Provider docs omit the no-total fallback, the `{}` answer and the daily-replace / hourly-upsert difference. | Lane 3 | LOW | `docs/providers/cursor.md` storage paragraph. | Fix the paragraph. |
+
+## Round 3 (second remediation re-review)
+
+- Reviewed: `6d7e0336..d2de8c1b` (code, tests, provider docs; review records excluded). Prompt `round3/prompt.md` (SHA-256 `bb4c196a…dfbb390`). The backfill script is reviewed separately.
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, no findings | `round3/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` (bwrap read-only, SSH variables unset) | high | APPROVE, no findings | `round3/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, home `~/.codex-family` (read-only sandbox) | high | APPROVE, 3 LOW | `round3/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 2 `init` reports `gemini-4-neon-high`, result `SUCCESS`. Lane 3 thread `01a2130a-387d-7a00-aa7e-fd991052052c`. The checkout stayed at `d2de8c1b`.
+
+| ID | Finding | Source | Severity | Disposition |
+|---|---|---|---|---|
+| R3-1 | Docs say every page carries the same total; later pages may omit it. | Lane 3 | LOW | Docs wording fixed after the round (provider docs, no experiment-validity content). |
+| R3-2 | A short page below a known total is labeled `Partial sample (page cap)` instead of `incomplete fetch`. | Lane 3 | LOW | Deferred: label only; the range is still partial and not stored. |
+| R3-3 | When the probe budget is spent before any event request, no Events Note is shown. | Lane 3 | LOW | Deferred: the same existing zero-event behavior as R1-2's last sub-claim. |
+
+Gate: zero unresolved CRITICAL, HIGH or MEDIUM findings at `d2de8c1b`.
