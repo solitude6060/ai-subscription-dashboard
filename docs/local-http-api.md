@@ -7,8 +7,8 @@ remaining sections describe the legacy Tauri API.
 
 `GET /api/providers` returns each provider's status. `lastRefreshAt` records the
 latest refresh attempt and `lastError` is present when that attempt failed.
-`lastSuccessAt` is optional and records the latest successful server refresh,
-even after a later failure.
+`lastSuccessAt` is optional and records the latest successful refresh, even after
+a later failure. A refresh recorded without an error counts as successful.
 
 ## Legacy Tauri API
 

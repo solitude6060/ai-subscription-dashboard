@@ -201,6 +201,11 @@ export class SqliteStorage implements Storage {
       const columns = db.query<{ name: string }, []>("PRAGMA table_info(provider_status)").all();
       if (!columns.some((column) => column.name === "last_success_at")) {
         db.exec("ALTER TABLE provider_status ADD COLUMN last_success_at TEXT");
+        // Rows written before the column existed: an error-free refresh was a success.
+        db.exec(`
+          UPDATE provider_status SET last_success_at = last_refresh_at
+          WHERE last_error IS NULL AND last_refresh_at IS NOT NULL
+        `);
       }
     }).immediate();
     this.db.exec(TOKEN_HOURLY_SCHEMA);
@@ -651,7 +656,11 @@ export class SqliteStorage implements Storage {
           enabled = excluded.enabled,
           detected = excluded.detected,
           last_refresh_at = excluded.last_refresh_at,
-          last_success_at = COALESCE(excluded.last_success_at, provider_status.last_success_at),
+          last_success_at = COALESCE(
+            MAX(excluded.last_success_at, provider_status.last_success_at),
+            excluded.last_success_at,
+            provider_status.last_success_at
+          ),
           last_error = excluded.last_error
       `)
       .run(
@@ -660,7 +669,9 @@ export class SqliteStorage implements Storage {
         status.enabled ? 1 : 0,
         status.detected ? 1 : 0,
         status.lastRefreshAt ?? null,
-        status.lastSuccessAt ?? null,
+        // A status written without an error is a success at its refresh time; this covers
+        // callers that do not pass lastSuccessAt (cli-status.ts).
+        status.lastSuccessAt ?? (status.lastError ? null : status.lastRefreshAt ?? null),
         status.lastError ?? null,
       );
   }

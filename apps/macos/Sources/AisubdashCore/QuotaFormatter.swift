@@ -23,7 +23,7 @@ public enum QuotaFormatter {
     }
 
     public static func cardValue(_ quota: UsageQuota) -> String {
-        guard case .usd = quota.format else { return compactValue(quota) }
+        guard case .usd = quota.format, quota.limit > 0 else { return compactValue(quota) }
         return String(format: "$%.2f / $%.2f", quota.used, quota.limit)
     }
 

@@ -185,3 +185,25 @@ At `a83f28b`: `swift test` 60 tests, 0 failures; `bun run test:webui` 635 pass, 
 
 Not verified: the CI runner build, VoiceOver speech, and an owner check of the card value and
 the retained pin. Deferred: F8 (list height headroom, `NSScreen.main`).
+
+### Remediation re-review, round 2 (2026-11-25)
+
+Target `ef82ff1..154535e`. Lane 1 (Grok Build `grok-4.7`, xhigh): REQUEST_CHANGES. Lane 2
+(AGY `gemini-4-neon-high`, high): APPROVE with two LOW findings. Lane 3 (Codex
+`gpt-6.2-sol`, high): no review; the client returned "You've hit your usage limit ... try
+again at 8:54 PM". Transcripts: `reviews/pr71-triple-r2/` in the sibling artifacts directory.
+
+| Finding | Source | Severity | Verified | Repair |
+| --- | --- | --- | --- | --- |
+| The migration adds `last_success_at` without copying the time of an existing successful row, so the first failed refresh after an upgrade still loses the success time. | Grok | MEDIUM | Yes | The migration sets `last_success_at = last_refresh_at` for rows without an error. |
+| `cli-status.ts` writes a successful refresh without `lastSuccessAt`; the stored value stays older than `lastRefreshAt` and the decoder prefers it. | Grok (MEDIUM), Neon (LOW) | MEDIUM | Yes, `cli-status.ts:95-101` | Repaired in `SqliteStorage.upsertProviderStatus`, the one function every writer calls: a status without an error is dated as a success at its refresh time, and the stored value never moves backwards. |
+| `cardValue` prints `$x / $0.00` for a dollar quota with a non-positive limit. Not reachable from decoded data (`limit > 0` is required). | Neon | LOW | Yes | `cardValue` falls back to `compactValue`. |
+
+Test commit then fix commit, by the orchestrator (Codex quota exhausted): the storage tests
+failed on 2 assertions and the Swift suite on 1 before the repair. After it: `swift test`
+60 tests, 0 failures; `bun run test:webui` 636 pass, 2 skip, 0 fail; `bun run build:webui`
+passes. The expectation of the existing test "upserts provider status and settings" now
+includes `lastSuccessAt`.
+
+CI on `154535e` (first run on `macos-15` with the linker flags): `Native Build and API Smoke
+Test` and `Lint, Type-check, Build, Test` passed.

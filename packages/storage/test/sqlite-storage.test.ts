@@ -127,6 +127,7 @@ describe("SqliteStorage", () => {
         enabled: true,
         detected: true,
         lastRefreshAt: "2026-06-14T12:00:00.000Z",
+        lastSuccessAt: "2026-06-14T12:00:00.000Z",
       },
     ]);
     expect(await storage.getProviderSettings("manual")).toEqual({
