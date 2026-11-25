@@ -8,6 +8,7 @@ import {
 import { applyProviderHomeEnv } from "./account-detect";
 import { codexSessionTokenOwnerIds } from "./codex-session-ownership";
 import { CcusageProvider } from "./providers/ccusage";
+import { ColabProvider } from "./providers/colab";
 import { ManualProvider } from "./providers/manual";
 import { MiniMaxProvider } from "./providers/minimax";
 import { OpenUsagePluginProvider } from "./providers/openusage-plugin";
@@ -154,6 +155,7 @@ export function getProviders(options: GetProvidersOptions = {}): UsageProvider[]
 
   return [
     new CcusageProvider(),
+    new ColabProvider({ env }),
     ...plugins,
     new ManualProvider(),
     new MiniMaxProvider(),
