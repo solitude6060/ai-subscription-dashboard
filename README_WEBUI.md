@@ -76,9 +76,10 @@ http://127.0.0.1:6736
 ```
 
 `bun run status` prints the stored usage in the terminal; `bun run status:refresh` refreshes first. When a
-WebUI server answers on `127.0.0.1:${OPENUSAGE_WEBUI_PORT:-6736}` with the same database, the refresh runs
-through that server (`POST /api/providers/refresh`), so the server stays the only writer; otherwise the
-command refreshes and writes locally.
+WebUI server answers on `127.0.0.1:${OPENUSAGE_WEBUI_PORT:-6736}` and reports the same database (compared as
+absolute paths with symlinks resolved), the refresh runs through that server (`POST /api/providers/refresh`),
+so the server stays the only writer; if that server refresh fails, the command exits with an error. Without
+such a server the command refreshes and writes locally.
 
 ## Production-Like Local Use
 

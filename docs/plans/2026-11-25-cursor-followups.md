@@ -19,8 +19,8 @@ Deferred items from PR #70, PR #72 and PR #74 (owner: 「持續做完」).
 
 ## Tests
 
-- CLI: with a stub server reporting the same `databasePath`, `status:refresh` posts `/api/providers/refresh` and prints the server results; with a different `databasePath` or no server it refreshes locally.
-- Collector: an event outside an explicit query range fails the query; a day fed by a covering and a partial query is not `completeDay`, in both orders; a range with only one bound is not `completeDay`.
+- CLI (subprocess, every provider disabled in the test database, exit code asserted): with a stub server reporting the same `databasePath` (also through a relative data directory or a symlink), `status:refresh` posts `/api/providers/refresh` and prints the server results; a server HTTP 500 exits non-zero without a local refresh; a relative reported path, another database or no server refreshes locally. The last four are regression locks that pass on base. `webuiPort` (new helper) is unit-tested with the fix.
+- Collector: an event outside a requested bound (either bound) or without a readable time fails the query; a day fed by a covering and a partial query is not `completeDay`, in both orders; a range with only one bound is not `completeDay`.
 - Plugin: a short page below a known total ends in `Partial sample (incomplete fetch)`; a deadline that passes before the first event request shows `Partial sample (time limit)`; a deadline after some events shows `Partial sample (time limit)`.
 - PR #70 test case update.
 
