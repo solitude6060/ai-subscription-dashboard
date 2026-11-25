@@ -18,24 +18,27 @@ only. `token_hourly` holds both names, so hourly totals exceed daily totals by 1
 
 ## Change
 
-When a batch with `replaceScopes` replaces the daily rows of a UTC day for a provider and a tool whose
-hourly rows use UTC days (`Cursor Usage Event`, `Grok Session`, `Pi Session`), it also deletes that
-provider and tool's `token_hourly` rows for the same UTC day before the batch's hourly rows are
-written. Both deletes and the inserts stay in the existing transaction.
+When a batch with `replaceScopes` replaces the daily rows of a closed UTC day (the day has ended at write
+time, and the daily row starts at 00:00 UTC) for `Cursor Usage Event`, it also deletes that provider's
+Cursor `token_hourly` rows of the same UTC day before the batch's hourly rows are written, in the
+existing transaction.
 
-Not changed: `ccusage` (its hourly rows pair with local days), hourly rows of days the batch does not
-replace, batches without `replaceScopes`.
+Not changed: today's hourly rows (an earlier refresh can commit after a later one), Grok (a scan can skip
+an unreadable transcript, so a day's batch can be partial), `ccusage` and Pi (local-day labels; Pi emits
+no hourly rows), hourly rows of days the batch does not replace, batches without `replaceScopes`.
+(PR #74 review round 1.)
 
-Both Cursor and Grok build their daily and hourly rows from the same events (`CursorUsageCollector`,
-`aggregateGrokEntries`), so a replaced day's hourly rows come from the same complete data. Pi emits no
-hourly rows.
+`CursorUsageCollector` emits daily and hourly rows only from complete queries that start at 00:00 UTC, so
+a replaced closed day's hourly rows come from the same complete data.
 
 ## Tests
 
 `packages/storage/test/token-hourly.test.ts`:
 
-- a replaced Cursor day loses an hourly model the batch no longer has; Grok the same;
-- hourly rows of a day the batch does not replace stay;
+- a replaced closed Cursor day loses the hours and models the batch no longer has;
+- Grok hourly rows, today's Cursor hourly rows and the hours around a daily row that does not start at
+  00:00 UTC stay;
+- hourly rows of the neighbouring days (including the next day's 00:00) stay;
 - hourly rows stay when the batch carries hourly rows but no daily row for that day;
 - `ccusage` hourly rows stay when its daily scope is replaced.
 
@@ -46,4 +49,4 @@ hourly rows.
 ## Exit Criteria
 
 - New tests fail on `origin/main` for the stated reason, then pass; full Vitest, Bun tests and builds pass.
-- Triple-review APPROVE; merge; deploy; after one Cursor refresh, hourly equals daily for 2026-11-16..25.
+- Triple-review APPROVE; merge; deploy; after one Cursor refresh, hourly equals daily for the closed days 2026-11-16..24.
