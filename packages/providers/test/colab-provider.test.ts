@@ -56,8 +56,7 @@ describe("ColabProvider", () => {
     expect((await provider.refresh()).map((record) => record.raw)).toEqual([{
       lines: [
         { type: "text", label: "Balance", value: "37.00 compute units" },
-        { type: "text", label: "Usage Rate", value: "3.00 units/hr" },
-        { type: "text", label: "Time Left", value: "12.3 h" },
+        { type: "text", label: "Usage Rate", value: "3.00 units/hr, 12.3 h left" },
         { type: "text", label: "Active Sessions", value: "2" },
       ],
     }]);
