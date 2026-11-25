@@ -21,3 +21,21 @@ The orchestrator is Claude Code (Anthropic); the lanes are xAI, Google and OpenA
 | H1-3 | A daily row that does not start at 00:00 UTC shifts the delete into the next day. | Lane 3, lane 2 | LOW | Delete range was `[startedAt, startedAt + 24 h)`. | Fixed: the parsed start must be a UTC midnight. |
 | H1-4 | Pi labels local days but was in the replaced set. | Lane 2 | LOW | `allowance-tokens.ts` groups Pi with ccusage as a local-day tool. | Fixed by the Cursor-only allowlist. |
 | H1-5 | Tests did not cover a stale non-00:00 hour or the next day's 00:00 hour. | Lane 2 | LOW | `token-hourly.test.ts`. | Fixed: both added. |
+
+## Round 2 (remediation re-review)
+
+- Reviewed `71fb80cf..dd82ec60` (review records excluded). Prompt `pr74-round2/prompt.md` (SHA-256 `7aa98c3e…cf6d7b85e`).
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, 1 LOW | `pr74-round2/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` | high | APPROVE, 2 LOW | `pr74-round2/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, `~/.codex-family` | high | REQUEST_CHANGES, 1 MEDIUM, 2 LOW | `pr74-round2/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 3 thread `01a21337-f6a9-7e33-8fcc-9021e237d64b`.
+
+| ID | Finding | Source | Severity | Disposition |
+|---|---|---|---|---|
+| H2-1 | A refresh that fetched today before UTC midnight and writes after it counts the day as closed and replaces its hourly rows with a partial batch. | Lanes 1, 2 (LOW), lane 3 (MEDIUM) | MEDIUM | Fixed: a day counts as closed 10 minutes after it ends; the plugin worker stops a refresh at 120 s. Test first (9 and 10 minutes, pinned clock). The daily row in the same race (an earlier batch replacing a later daily total) is the existing daily behavior and is restored by the next refresh; not changed here. |
+| H2-2 | The today test read the wall clock. | Lanes 2, 3 | LOW | Fixed: replaced by pinned-clock tests. |
+| H2-3 | The plan's exit criterion named the wrong baseline for the remediation tests. | Lane 3 | LOW | Fixed: each test names its baseline. |
