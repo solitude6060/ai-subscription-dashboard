@@ -41,6 +41,25 @@ describe("CursorUsageCollector per query", () => {
     ]);
   });
 
+  test("keeps the day and its first hour when the query starts exactly at 00:00 UTC", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T00:10:00.000Z", 3)], 1),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+
+    expect(summary(collector.records("cursor"))).toEqual([
+      ["day", "2026-11-17T00:00:00.000Z", 3],
+      ["hour", "2026-11-17T00:00:00.000Z", 3],
+    ]);
+  });
+
+  test("emits nothing for a query that returns more events than its total", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T01:10:00.000Z", 3), event("2026-11-17T01:20:00.000Z", 3)], 1),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+
+    expect(collector.records("cursor")).toEqual([]);
+  });
+
   test("tracks completeness per query", () => {
     const collector = new CursorUsageCollector();
     collector.capture(200, page([event("2026-11-17T01:10:00.000Z", 3)], 1),
