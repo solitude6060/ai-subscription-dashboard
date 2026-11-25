@@ -110,27 +110,80 @@ describe("token_hourly rows of a replaced day", () => {
     return rows;
   };
 
-  test.each([
-    ["cursor", "Cursor Usage Event", "api"],
-    ["grok", "Grok Session", "local-log"],
-  ] as const)("a replaced %s day loses an hourly model the batch no longer has", async (providerId, tool, source) => {
+  test("a replaced closed Cursor day loses the hours and models the batch no longer has", async () => {
     const path = join(dataDir, "replace.sqlite");
     const storage = new SqliteStorage(path);
     await storage.init();
     const day = "2026-11-16T00:00:00.000Z";
+    const tool = "Cursor Usage Event";
     await storage.upsertUsageRecords([
-      daily({ id: "d-old", providerId, tool, source, startedAt: day, model: "helios-alpha", totalTokens: 9 }),
-      hourly({ id: "h-old", providerId, tool, source, startedAt: day, model: "helios-alpha", totalTokens: 9 }),
+      daily({ id: "d-old", providerId: "cursor", tool, source: "api", startedAt: day, model: "helios-alpha", totalTokens: 13 }),
+      hourly({ id: "h-old-0", providerId: "cursor", tool, source: "api", startedAt: day, model: "helios-alpha", totalTokens: 9 }),
+      hourly({ id: "h-old-4", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T04:00:00.000Z", model: "helios-alpha", totalTokens: 4 }),
     ], { replaceScopes: true });
     await storage.upsertUsageRecords([
-      daily({ id: "d-new", providerId, tool, source, startedAt: day, model: "Other", totalTokens: 9 }),
-      hourly({ id: "h-new", providerId, tool, source, startedAt: day, model: "Other", totalTokens: 9 }),
+      daily({ id: "d-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
+      hourly({ id: "h-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
     ], { replaceScopes: true });
     storage.close();
 
     expect(hourlyRows(path)).toEqual([
-      { provider_id: providerId, tool, hour_start: day, model: "Other", total_tokens: 9 },
+      { provider_id: "cursor", tool, hour_start: day, model: "Other", total_tokens: 9 },
     ]);
+  });
+
+  test("keeps Grok hourly rows upsert-only, since a scan can skip an unreadable transcript", async () => {
+    const path = join(dataDir, "grok.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const day = "2026-11-16T00:00:00.000Z";
+    const tool = "Grok Session";
+    await storage.upsertUsageRecords([
+      daily({ id: "d-g", providerId: "grok", tool, source: "local-log", startedAt: day, totalTokens: 15 }),
+      hourly({ id: "h-g-9", providerId: "grok", tool, source: "local-log", startedAt: "2026-11-16T09:00:00.000Z", totalTokens: 5 }),
+      hourly({ id: "h-g-10", providerId: "grok", tool, source: "local-log", startedAt: "2026-11-16T10:00:00.000Z", totalTokens: 10 }),
+    ], { replaceScopes: true });
+    await storage.upsertUsageRecords([
+      daily({ id: "d-g", providerId: "grok", tool, source: "local-log", startedAt: day, totalTokens: 10 }),
+      hourly({ id: "h-g-10", providerId: "grok", tool, source: "local-log", startedAt: "2026-11-16T10:00:00.000Z", totalTokens: 10 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(2);
+  });
+
+  test("keeps today's Cursor hourly rows upsert-only, since an earlier refresh can commit after a later one", async () => {
+    const path = join(dataDir, "today.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const today = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-t-old", providerId: "cursor", tool, source: "api", startedAt: today, model: "helios-alpha", totalTokens: 9 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-t", providerId: "cursor", tool, source: "api", startedAt: today, model: "Other", totalTokens: 9 }),
+      hourly({ id: "h-t-new", providerId: "cursor", tool, source: "api", startedAt: today, model: "Other", totalTokens: 9 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(2);
+  });
+
+  test("does not delete hourly rows for a daily row that does not start at 00:00 UTC", async () => {
+    const path = join(dataDir, "not-midnight.sqlite");
+    const storage = new SqliteStorage(path);
+    await storage.init();
+    const tool = "Cursor Usage Event";
+    await storage.upsertUsageRecords([
+      hourly({ id: "h-17", providerId: "cursor", tool, source: "api", startedAt: "2026-11-17T05:00:00.000Z", totalTokens: 5 }),
+    ]);
+    await storage.upsertUsageRecords([
+      daily({ id: "d-930", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T09:30:00.000Z", totalTokens: 7 }),
+    ], { replaceScopes: true });
+    storage.close();
+
+    expect(hourlyRows(path)).toHaveLength(1);
   });
 
   test("keeps hourly rows of a day the batch does not replace", async () => {
@@ -141,6 +194,7 @@ describe("token_hourly rows of a replaced day", () => {
     const tool = "Cursor Usage Event";
     await storage.upsertUsageRecords([
       hourly({ id: "h-15", providerId: "cursor", tool, source, startedAt: "2026-11-15T23:00:00.000Z", totalTokens: 5 }),
+      hourly({ id: "h-17", providerId: "cursor", tool, source, startedAt: "2026-11-17T00:00:00.000Z", totalTokens: 3 }),
     ]);
     await storage.upsertUsageRecords([
       daily({ id: "d-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7 }),
@@ -151,6 +205,7 @@ describe("token_hourly rows of a replaced day", () => {
     expect(hourlyRows(path)).toEqual([
       { provider_id: "cursor", tool, hour_start: "2026-11-15T23:00:00.000Z", model: "model", total_tokens: 5 },
       { provider_id: "cursor", tool, hour_start: "2026-11-16T00:00:00.000Z", model: "model", total_tokens: 7 },
+      { provider_id: "cursor", tool, hour_start: "2026-11-17T00:00:00.000Z", model: "model", total_tokens: 3 },
     ]);
   });
 
