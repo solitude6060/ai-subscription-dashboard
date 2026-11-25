@@ -144,14 +144,15 @@ describe("ColabProvider", () => {
     `;
 
     try {
-      await expect(runCommand(process.execPath, ["-e", parent], runnerDeadlineMs)).resolves.toEqual({
+      const result = await runCommand(process.execPath, ["-e", parent], runnerDeadlineMs)
+        .finally(() => stopFixture(pidPath));
+      expect(result).toEqual({
         ok: false,
         stdout: "",
         stderr: `${process.execPath} command timed out`,
       });
       expect(isRunning(Number(await Bun.file(pidPath).text()))).toBe(false);
     } finally {
-      await stopFixture(pidPath);
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
