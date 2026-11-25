@@ -32,3 +32,9 @@ directory.
 | The lingering-output test polls with signal 0, which also succeeds for a zombie that its adoptive parent has not reaped. | Sol (MEDIUM) | By reading; not reproduced on macOS | Partly: the cleanup loop stops waiting at its deadline without failing. The assertion that the fixture is gone stays, so the test still depends on the system reaping orphans. Recorded as a limit. |
 
 After the repair: Colab and ccusage tests 45 pass, 2 skip, 0 fail.
+
+Round 3, target `1c77abf..e814486`: lanes 1 and 2 APPROVE with no findings; lane 3 (Codex
+`gpt-6.2-sol`) REQUEST_CHANGES, 1 MEDIUM: a pid file read while it holds only some of its digits
+parses as another process id. Repair: the fixtures write the pid to a sibling file and rename it
+into place, and `readPid` rejects values above the signed 32-bit range. Test-only change.
+Transcripts: `reviews/colab-triple-r3/`.

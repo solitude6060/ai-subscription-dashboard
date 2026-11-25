@@ -38,7 +38,13 @@ async function readPid(pidPath: string): Promise<number | null> {
   const file = Bun.file(pidPath);
   if (!(await file.exists())) return null;
   const pid = Number((await file.text()).trim());
-  return Number.isInteger(pid) && pid > 0 ? pid : null;
+  return Number.isInteger(pid) && pid > 0 && pid <= 0x7fffffff ? pid : null;
+}
+
+// Fixture source that publishes a pid by rename, so a reader sees all of its digits or no file.
+function publishPidSource(pidPath: string, expression: string): string {
+  const tmp = JSON.stringify(`${pidPath}.tmp`);
+  return `await Bun.write(${tmp}, String(${expression})); require("node:fs").renameSync(${tmp}, ${JSON.stringify(pidPath)});`;
 }
 
 async function stopFixture(pidPath: string): Promise<void> {
@@ -218,7 +224,7 @@ describe("ColabProvider", () => {
         stdout: "inherit",
         stderr: "inherit",
       });
-      await Bun.write(${JSON.stringify(pidPath)}, String(child.pid));
+      ${publishPidSource(pidPath, "child.pid")}
       child.unref();
       process.exit(0);
     `;
@@ -243,7 +249,7 @@ describe("ColabProvider", () => {
     const dir = mkdtempSync(join(import.meta.dir, ".colab-runner-"));
     const pidPath = join(dir, "command.pid");
     const command = `
-      await Bun.write(${JSON.stringify(pidPath)}, String(process.pid));
+      ${publishPidSource(pidPath, "process.pid")}
       ${fixtureSleep};
     `;
 
