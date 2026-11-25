@@ -18,8 +18,9 @@ only. `token_hourly` holds both names, so hourly totals exceed daily totals by 1
 
 ## Change
 
-When a batch with `replaceScopes` replaces the daily rows of a closed UTC day (the day has ended at write
-time, and the daily row starts at 00:00 UTC) for `Cursor Usage Event`, it also deletes that provider's
+When a batch with `replaceScopes` replaces the daily rows of a closed UTC day (the day ended at least 10
+minutes before the write, and the daily row starts at 00:00 UTC; a refresh that fetched the day before
+midnight writes within the 120 s worker limit) for `Cursor Usage Event`, it also deletes that provider's
 Cursor `token_hourly` rows of the same UTC day before the batch's hourly rows are written, in the
 existing transaction.
 
@@ -36,8 +37,8 @@ a replaced closed day's hourly rows come from the same complete data.
 `packages/storage/test/token-hourly.test.ts`:
 
 - a replaced closed Cursor day loses the hours and models the batch no longer has;
-- Grok hourly rows, today's Cursor hourly rows and the hours around a daily row that does not start at
-  00:00 UTC stay;
+- Grok hourly rows, a Cursor day's hourly rows 9 minutes after it ends (replaced at 10 minutes, pinned clock)
+  and the hours around a daily row that does not start at 00:00 UTC stay;
 - hourly rows of the neighbouring days (including the next day's 00:00) stay;
 - hourly rows stay when the batch carries hourly rows but no daily row for that day;
 - `ccusage` hourly rows stay when its daily scope is replaced.
@@ -48,5 +49,5 @@ a replaced closed day's hourly rows come from the same complete data.
 
 ## Exit Criteria
 
-- New tests fail on `origin/main` for the stated reason, then pass; full Vitest, Bun tests and builds pass.
+- The stale-model test fails on `origin/main`; the round 1 tests (Grok, today, non-midnight) fail on `71fb80cf`; the 9-minute test fails on `dd82ec60`; neighbour-day, no-daily-row and ccusage tests are boundary locks that pass on every base. Full Vitest, Bun tests and builds pass.
 - Triple-review APPROVE; merge; deploy; after one Cursor refresh, hourly equals daily for the closed days 2026-11-16..24.
