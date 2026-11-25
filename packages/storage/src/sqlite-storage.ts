@@ -94,6 +94,9 @@ const DAY_MS = 86_400_000;
 // Tools whose hourly rows come from complete UTC-day queries, so a replaced closed day can replace them.
 // Grok scans can skip an unreadable transcript; ccusage and Pi label local days.
 const DAY_REPLACED_HOURLY_TOOLS = ["Cursor Usage Event"];
+// A refresh that fetched a day before midnight writes within the 120 s plugin worker limit, so a day
+// counts as closed only 10 minutes after it ends.
+const CLOSED_DAY_GRACE_MS = 10 * 60_000;
 
 export class SqliteStorage implements Storage {
   private db: Database | null = null;
@@ -360,12 +363,12 @@ export class SqliteStorage implements Storage {
           scopes.add(scope);
           deleteScope.run(record.providerId, record.tool, record.startedAt, record.source);
           // A replaced closed UTC day also replaces its hourly rows, so an hour or model the source no
-          // longer reports does not stay in Allowance. Today's rows stay upsert-only because an earlier
-          // refresh can commit after a later one.
+          // longer reports does not stay in Allowance. Today's rows (and yesterday's for 10 minutes after
+          // midnight) stay upsert-only because an earlier refresh can commit after a later one.
           const dayStart = Date.parse(record.startedAt);
           if (
             DAY_REPLACED_HOURLY_TOOLS.includes(record.tool) &&
-            Number.isFinite(dayStart) && dayStart % DAY_MS === 0 && dayStart + DAY_MS <= Date.now()
+            Number.isFinite(dayStart) && dayStart % DAY_MS === 0 && dayStart + DAY_MS + CLOSED_DAY_GRACE_MS <= Date.now()
           ) {
             deleteHourlyDay.run(
               record.providerId,
