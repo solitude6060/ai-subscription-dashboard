@@ -54,8 +54,10 @@ rotate credentials following the existing collector rules.
 The panel shows each visible provider account and all its quotas. Each quota shows
 usage and a reset countdown when available. Hover over the countdown for the exact
 reset time. The account header shows how long ago the reading was taken and marks
-stale readings or refresh failures. If a connection fails, the panel can still show
-the last successful reading from this app session.
+stale readings or refresh failures. Reading age uses the later of the snapshot start
+and the last successful refresh when the backend reports it. On older backends, a
+failed refresh leaves the age based on the snapshot start. If a connection fails,
+the panel can still show the last successful reading from this app session.
 
 Select the pin next to a quota to show its value in the menu bar. Hiding that
 provider keeps the pin active. To remove it, select **Unpin** next to the quota or

@@ -79,8 +79,9 @@ export async function syncProviderStatus(
       continue;
     }
     if (previous.name !== provider.name) {
+      const { lastSuccessAt: _, ...status } = previous;
       await storage.upsertProviderStatus({
-        ...previous,
+        ...status,
         name: provider.name,
       });
     }
@@ -182,8 +183,9 @@ export async function updateProviderAccount(
   await storage.upsertProviderAccount(next);
   const status = (await storage.listProviderStatus()).find((item) => item.providerId === id);
   if (status) {
+    const { lastSuccessAt: _, ...previous } = status;
     await storage.upsertProviderStatus({
-      ...status,
+      ...previous,
       name: next.label,
       enabled: next.enabled,
     });
