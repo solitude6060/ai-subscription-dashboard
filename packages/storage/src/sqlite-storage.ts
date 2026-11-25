@@ -109,6 +109,8 @@ export class SqliteStorage implements Storage {
     }
 
     this.db = new Database(this.databasePath, { create: true });
+    // The WebUI server and the CLI can open the same database; wait for the other's write lock.
+    this.db.exec("PRAGMA busy_timeout = 5000");
     await chmod(this.databasePath, 0o600).catch(() => undefined);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS usage_records (

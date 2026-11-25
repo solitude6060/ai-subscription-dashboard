@@ -126,6 +126,11 @@ export class CursorUsageCollector {
       query.failed = true;
       return;
     }
+    // A bounded query whose list has a non-object entry cannot be counted reliably.
+    if ((Number.isFinite(query.start) || Number.isFinite(query.end)) && !body.usageEventsDisplay.every(isObject)) {
+      query.failed = true;
+      return;
+    }
     query.events.push(...body.usageEventsDisplay.filter(isObject));
     const total = finiteNumber(body.totalUsageEventsCount);
     if (total !== undefined) {

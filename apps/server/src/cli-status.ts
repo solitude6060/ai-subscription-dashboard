@@ -98,7 +98,8 @@ async function refreshThroughServer(): Promise<ServerRefreshResult[] | null> {
   const response = await fetch(`${base}/api/providers/refresh`, { method: "POST" });
   if (!response.ok) throw new Error(`WebUI server refresh returned HTTP ${response.status}`);
   const body = (await response.json()) as { results?: ServerRefreshResult[] };
-  return Array.isArray(body.results) ? body.results : [];
+  if (!Array.isArray(body.results)) throw new Error("WebUI server refresh returned no results list");
+  return body.results;
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
