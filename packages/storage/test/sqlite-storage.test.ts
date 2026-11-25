@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,6 +137,64 @@ describe("SqliteStorage", () => {
     });
 
     storage.close();
+  });
+
+  test("keeps the last successful refresh through a failure and an enabled toggle", async () => {
+    const storage = new SqliteStorage();
+    await storage.init();
+    try {
+      const status = { providerId: "minimax", name: "MiniMax", enabled: true, detected: true } as const;
+      const lastSuccessAt = "2026-11-22T06:18:00.000Z";
+      const success = { ...status, lastRefreshAt: lastSuccessAt, lastSuccessAt };
+      const failure = { ...status, lastRefreshAt: "2026-11-22T06:30:00.000Z", lastError: "Unavailable" };
+      await storage.upsertProviderStatus(success);
+      await storage.upsertProviderStatus(failure);
+      expect((await storage.listProviderStatus())[0]).toMatchObject({ ...failure, lastSuccessAt });
+
+      await storage.upsertProviderStatus({ ...failure, enabled: false });
+      expect((await storage.listProviderStatus())[0]).toMatchObject({ ...failure, enabled: false, lastSuccessAt });
+    } finally {
+      storage.close();
+    }
+  });
+
+  test("migrates an existing provider status table without losing rows", async () => {
+    const db = new Database(getDatabasePath(), { create: true });
+    db.exec(`
+      CREATE TABLE provider_status (
+        provider_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        detected INTEGER NOT NULL DEFAULT 0,
+        last_refresh_at TEXT,
+        last_error TEXT
+      );
+      INSERT INTO provider_status VALUES ('minimax', 'MiniMax', 1, 1, '2026-11-22T06:18:00.000Z', NULL);
+    `);
+    db.close();
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const storage = new SqliteStorage();
+      await storage.init();
+      try {
+        expect(await storage.listProviderStatus()).toEqual([{
+          providerId: "minimax",
+          name: "MiniMax",
+          enabled: true,
+          detected: true,
+          lastRefreshAt: "2026-11-22T06:18:00.000Z",
+        }]);
+      } finally {
+        storage.close();
+      }
+      const migrated = new Database(getDatabasePath(), { readonly: true });
+      try {
+        expect(migrated.query("PRAGMA table_info(provider_status)").all())
+          .toContainEqual(expect.objectContaining({ name: "last_success_at", type: "TEXT" }));
+      } finally {
+        migrated.close();
+      }
+    }
   });
 
   test("stores and deletes provider accounts", async () => {

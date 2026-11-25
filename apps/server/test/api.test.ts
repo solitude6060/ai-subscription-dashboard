@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -272,6 +272,43 @@ describe("WebUI API", () => {
         lastError: "Not logged in. Run `gh auth login` first.",
       },
     ]);
+  });
+
+  test("reports the last successful refresh after a provider fails", async () => {
+    let shouldFail = false;
+    handleRequest = createRequestHandler(storage, {
+      host: "127.0.0.1",
+      port: 6736,
+    }, undefined, [{
+      id: "minimax",
+      name: "MiniMax",
+      detect: async () => true,
+      refresh: async () => {
+        if (shouldFail) throw new Error("Unavailable");
+        return [{ id: "minimax-window", providerId: "minimax", startedAt: "2026-11-22T05:00:00.000Z", source: "test" }];
+      },
+    }]);
+    const providersUrl = "http://127.0.0.1:6736/api/providers";
+    const lastSuccessAt = "2026-11-22T06:18:00.000Z";
+    const lastRefreshAt = "2026-11-22T06:30:00.000Z";
+
+    try {
+      setSystemTime(new Date(lastSuccessAt));
+      const success = await handleRequest(new Request(`${providersUrl}/minimax/refresh`, { method: "POST" }));
+      expect((await success.json()).results).toEqual([{ providerId: "minimax", ok: true, records: 1 }]);
+
+      shouldFail = true;
+      setSystemTime(new Date(lastRefreshAt));
+      const failure = await handleRequest(new Request(`${providersUrl}/minimax/refresh`, { method: "POST" }));
+      expect((await failure.json()).results).toEqual([{ providerId: "minimax", ok: false, error: "Unavailable" }]);
+
+      const response = await handleRequest(new Request(providersUrl));
+      expect(response.status).toBe(200);
+      const [status] = await response.json();
+      expect(status).toMatchObject({ providerId: "minimax", lastError: "Unavailable", lastRefreshAt, lastSuccessAt });
+    } finally {
+      setSystemTime();
+    }
   });
 
   test("minimax refresh reports missing API key as a provider-level error", async () => {

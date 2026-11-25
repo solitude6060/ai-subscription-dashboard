@@ -195,6 +195,29 @@ final class UsageContractTests: XCTestCase {
         XCTAssertNil(dashboard.accounts[2].observedAt)
     }
 
+    func testFailedRefreshDatesReadingByLastSuccessOrLaterSnapshot() throws {
+        let providersJSON = Data("""
+        [
+          { "providerId": "minimax", "enabled": true, "lastError": "Provider refresh failed",
+            "lastRefreshAt": "2026-11-22T06:30:00Z", "lastSuccessAt": "2026-11-22T06:18:00Z" },
+          { "providerId": "codex", "enabled": true, "lastError": "Provider refresh failed",
+            "lastRefreshAt": "2026-11-22T06:30:00Z", "lastSuccessAt": "2026-11-22T06:18:00Z" }
+        ]
+        """.utf8)
+        let snapshotsJSON = Data("""
+        [
+          { "providerId": "minimax", "startedAt": "2026-11-22T05:00:00Z" },
+          { "providerId": "codex", "startedAt": "2026-11-22T06:20:00Z" }
+        ]
+        """.utf8)
+        let dashboard = try UsageContractDecoder.decode(providersData: providersJSON, snapshotsData: snapshotsJSON)
+        let iso = ISO8601DateFormatter()
+
+        XCTAssertEqual(dashboard.accounts[0].observedAt, iso.date(from: "2026-11-22T06:18:00Z"))
+        XCTAssertEqual(dashboard.accounts[1].observedAt, iso.date(from: "2026-11-22T06:20:00Z"))
+        XCTAssertTrue(dashboard.accounts.allSatisfy(\.refreshFailed))
+    }
+
     func testMixedSnapshotsDisabledProvidersAndZeroVersusMissing() throws {
         let providersJSON = Data("""
         [
