@@ -141,3 +141,39 @@ describe("CursorUsageCollector complete days", () => {
     expect(dailyFlags(collector.records("cursor"))).toEqual([["2026-11-16T00:00:00.000Z", false]]);
   });
 });
+
+describe("CursorUsageCollector ranges", () => {
+  const dailyFlags = (records: UsageRecord[]) => records
+    .filter((record) => record.endedAt === undefined)
+    .map((record) => [record.startedAt, record.completeDay === true]);
+
+  test.each([
+    ["after its end", "2026-11-18T01:00:00.000Z"],
+    ["before its start", "2026-11-16T23:00:00.000Z"],
+  ])("fails a query that returns an event %s", (_name, outside) => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T01:00:00.000Z", 3), event(outside, 5)], 2),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+
+    expect(collector.records("cursor")).toEqual([]);
+  });
+
+  test.each([["covering first"], ["partial first"]])("a day fed by a covering and a partial query is not complete (%s)", (order) => {
+    const collector = new CursorUsageCollector();
+    const covering = () => collector.capture(200, page([event("2026-11-17T01:00:00.000Z", 3)], 1),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+    const partial = () => collector.capture(200, page([event("2026-11-17T05:00:00.000Z", 2)], 1),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T12:00:00.000Z"));
+    if (order === "covering first") { covering(); partial(); } else { partial(); covering(); }
+
+    expect(dailyFlags(collector.records("cursor"))).toEqual([["2026-11-17T00:00:00.000Z", false]]);
+  });
+
+  test("a range with only a start is not complete", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T01:00:00.000Z", 3)], 1),
+      JSON.stringify({ startDate: String(Date.parse("2026-11-17T00:00:00.000Z")), page: 1, pageSize: 1000 }));
+
+    expect(dailyFlags(collector.records("cursor"))).toEqual([["2026-11-17T00:00:00.000Z", false]]);
+  });
+});

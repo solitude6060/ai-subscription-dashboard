@@ -255,7 +255,7 @@ describe("cursor plugin", () => {
 
     it.each([
       ["refresh-only", { refreshToken: "cli-refresh" }],
-      ["encrypted access token", { accessToken: ENCRYPTED, refreshToken: ENCRYPTED }],
+      ["encrypted access token", { accessToken: ENCRYPTED, refreshToken: "cli-refresh" }],
     ])("ignores a CLI auth file without a usable access token (%s)", async (_name, auth) => {
       const ctx = makeCtx()
       encryptedSqlite(ctx)
@@ -2671,7 +2671,8 @@ describe("cursor usage event ranges", () => {
 
     expect(eventBodies).toHaveLength(2)
     expect(eventTimeouts).toEqual([15000, 7000])
-    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+    expect(lineValue(result, "Last 7 Days")).toContain("· partial")
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
   })
 
   it("applies the first page total to later pages", async () => {
@@ -2739,5 +2740,33 @@ describe("cursor usage event ranges", () => {
     plugin.probe(ctx)
 
     expect(eventTimeouts[0]).toBe(5000)
+  })
+
+  it("marks a short page below a known total as an incomplete fetch, not the page cap", async () => {
+    const { ctx } = setup(() => ({
+      status: 200,
+      bodyText: JSON.stringify({ totalUsageEventsCount: 1500, usageEventsDisplay: Array.from({ length: 500 }, () => todayEvent) }),
+    }))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("shows a time-limit note when the probe budget is spent before the first event request", async () => {
+    const { ctx, eventBodies } = setup((opts) => usageEventsResponse(opts, [todayEvent]))
+    const answer = ctx.host.http.request.getMockImplementation()
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("GetCurrentPeriodUsage")) vi.setSystemTime(Date.now() + 30000)
+      return answer(opts)
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(0)
+    expect(lineValue(result, "Last 7 Days")).toBeUndefined()
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
   })
 })
