@@ -502,12 +502,14 @@ async function runProviderRefresh(
         const codexEvents = provider.takeCodexEventResult();
         if (codexEvents) await saveCodexEventScan(storage, codexEvents);
       }
+      const refreshedAt = new Date().toISOString();
       await storage.upsertProviderStatus({
         providerId: provider.id,
         name: provider.name,
         enabled: current?.enabled ?? provider.defaultEnabled !== false,
         detected,
-        lastRefreshAt: new Date().toISOString(),
+        lastRefreshAt: refreshedAt,
+        lastSuccessAt: refreshedAt,
       });
       results.push({ providerId: provider.id, ok: true, records: records.length });
       console.log(

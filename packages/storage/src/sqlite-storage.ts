@@ -60,6 +60,7 @@ type ProviderStatusRow = {
   enabled: number;
   detected: number;
   last_refresh_at: string | null;
+  last_success_at: string | null;
   last_error: string | null;
 };
 
@@ -138,6 +139,7 @@ export class SqliteStorage implements Storage {
         enabled INTEGER NOT NULL DEFAULT 1,
         detected INTEGER NOT NULL DEFAULT 0,
         last_refresh_at TEXT,
+        last_success_at TEXT,
         last_error TEXT
       );
 
@@ -194,6 +196,18 @@ export class SqliteStorage implements Storage {
         value TEXT NOT NULL
       );
     `);
+    const db = this.db;
+    db.transaction(() => {
+      const columns = db.query<{ name: string }, []>("PRAGMA table_info(provider_status)").all();
+      if (!columns.some((column) => column.name === "last_success_at")) {
+        db.exec("ALTER TABLE provider_status ADD COLUMN last_success_at TEXT");
+        // Rows written before the column existed: an error-free refresh was a success.
+        db.exec(`
+          UPDATE provider_status SET last_success_at = last_refresh_at
+          WHERE last_error IS NULL AND last_refresh_at IS NOT NULL
+        `);
+      }
+    }).immediate();
     this.db.exec(TOKEN_HOURLY_SCHEMA);
     this.db.exec(CODEX_TOKEN_EVENTS_SCHEMA);
     this.migrateCodexInstancesToProviderAccounts();
@@ -633,14 +647,20 @@ export class SqliteStorage implements Storage {
           enabled,
           detected,
           last_refresh_at,
+          last_success_at,
           last_error
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(provider_id) DO UPDATE SET
           name = excluded.name,
           enabled = excluded.enabled,
           detected = excluded.detected,
           last_refresh_at = excluded.last_refresh_at,
+          last_success_at = COALESCE(
+            MAX(excluded.last_success_at, provider_status.last_success_at),
+            excluded.last_success_at,
+            provider_status.last_success_at
+          ),
           last_error = excluded.last_error
       `)
       .run(
@@ -649,6 +669,9 @@ export class SqliteStorage implements Storage {
         status.enabled ? 1 : 0,
         status.detected ? 1 : 0,
         status.lastRefreshAt ?? null,
+        // A status written without an error is a success at its refresh time; this covers
+        // callers that do not pass lastSuccessAt (cli-status.ts).
+        status.lastSuccessAt ?? (status.lastError ? null : status.lastRefreshAt ?? null),
         status.lastError ?? null,
       );
   }
@@ -663,6 +686,7 @@ export class SqliteStorage implements Storage {
       enabled: row.enabled === 1,
       detected: row.detected === 1,
       lastRefreshAt: row.last_refresh_at ?? undefined,
+      lastSuccessAt: row.last_success_at ?? undefined,
       lastError: row.last_error ?? undefined,
     }));
   }

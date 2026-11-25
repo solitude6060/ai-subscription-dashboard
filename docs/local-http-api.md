@@ -1,5 +1,17 @@
 # Local HTTP API
 
+The [native aisubdash menu-bar app](macos-menu-bar.md) uses the Bun Web API. The
+remaining sections describe the legacy Tauri API.
+
+## Bun Web API Provider Status
+
+`GET /api/providers` returns each provider's status. `lastRefreshAt` records the
+latest refresh attempt and `lastError` is present when that attempt failed.
+`lastSuccessAt` is optional and records the latest successful refresh, even after
+a later failure. A refresh recorded without an error counts as successful.
+
+## Legacy Tauri API
+
 OpenUsage exposes a read-only HTTP API on the loopback interface by default so other local apps can consume the same usage data shown in the menu bar.
 
 **Base URL:** `http://127.0.0.1:6736`

@@ -94,15 +94,23 @@ export function normalizeCcusageHourlyBlocks(
   return records;
 }
 
-export class CursorUsageCollector {
-  private readonly events: JsonObject[] = [];
-  private expectedCount: number | null = null;
-  private complete = false;
-  private failed = false;
+type CursorEventQuery = {
+  start: number;
+  pageSize: number;
+  events: JsonObject[];
+  expectedCount: number | null;
+  complete: boolean;
+  failed: boolean;
+};
 
-  capture(status: number, bodyText: string): void {
+export class CursorUsageCollector {
+  // Keyed by request range. Stored rows replace whole days and hours, so completeness is per query.
+  private readonly queries = new Map<string, CursorEventQuery>();
+
+  capture(status: number, bodyText: string, requestBodyText?: string): void {
+    const query = this.query(requestBodyText);
     if (status < 200 || status >= 300) {
-      this.failed = true;
+      query.failed = true;
       return;
     }
 
@@ -110,37 +118,45 @@ export class CursorUsageCollector {
     try {
       body = JSON.parse(bodyText);
     } catch {
-      this.failed = true;
+      query.failed = true;
       return;
     }
     if (!isObject(body) || !Array.isArray(body.usageEventsDisplay)) {
-      this.failed = true;
+      query.failed = true;
       return;
     }
-
-    this.events.push(...body.usageEventsDisplay.filter(isObject));
+    query.events.push(...body.usageEventsDisplay.filter(isObject));
     const total = finiteNumber(body.totalUsageEventsCount);
-    if (total !== undefined) this.expectedCount = total;
-    this.complete = this.expectedCount !== null
-      ? this.events.length >= this.expectedCount
-      : body.usageEventsDisplay.length < 200;
+    if (total !== undefined) {
+      // A total that moves between pages means the pages shifted under new events.
+      if (query.expectedCount !== null && query.expectedCount !== total) query.failed = true;
+      query.expectedCount = total;
+    }
+    if (query.expectedCount !== null && query.events.length > query.expectedCount) query.failed = true;
+    query.complete = query.expectedCount !== null
+      ? query.events.length >= query.expectedCount
+      : body.usageEventsDisplay.length < query.pageSize;
   }
 
   records(providerId: ProviderId): UsageRecord[] {
-    if (this.failed || !this.complete) return [];
-
     const daily: TokenTotals = new Map();
     const hourly: TokenTotals = new Map();
-    for (const event of this.events) {
-      if (!isObject(event.tokenUsage)) continue;
-      const timestamp = eventTimestamp(event.timestamp);
-      if (!timestamp) continue;
-      const model = text(event.model) ?? "Unknown";
-      const tokens = tokenValues(event.tokenUsage);
-      if (!tokens) continue;
-      const costUsd = eventCostUsd(event);
-      addTokenTotal(daily, `${timestamp.slice(0, 10)}T00:00:00.000Z`, model, tokens, costUsd);
-      addTokenTotal(hourly, `${timestamp.slice(0, 13)}:00:00.000Z`, model, tokens, costUsd);
+    for (const query of this.queries.values()) {
+      if (query.failed || !query.complete) continue;
+      for (const event of query.events) {
+        if (!isObject(event.tokenUsage)) continue;
+        const timestamp = eventTimestamp(event.timestamp);
+        if (!timestamp) continue;
+        const model = text(event.model) ?? "Unknown";
+        const tokens = tokenValues(event.tokenUsage);
+        if (!tokens) continue;
+        const costUsd = eventCostUsd(event);
+        const day = `${timestamp.slice(0, 10)}T00:00:00.000Z`;
+        const hour = `${timestamp.slice(0, 13)}:00:00.000Z`;
+        // A day or hour that starts before the query start is partial; storing it would replace the full stored total.
+        if (Date.parse(day) >= query.start) addTokenTotal(daily, day, model, tokens, costUsd);
+        if (Date.parse(hour) >= query.start) addTokenTotal(hourly, hour, model, tokens, costUsd);
+      }
     }
 
     return [
@@ -149,6 +165,30 @@ export class CursorUsageCollector {
       ...[...hourly.values()].map(({ startedAt, model, tokens, costUsd, costKnown }) =>
         createHourlyTokenRecord(providerId, startedAt, model, tokens, "cursor-event", costKnown ? costUsd : undefined)),
     ];
+  }
+
+  private query(requestBodyText: string | undefined): CursorEventQuery {
+    let request: unknown;
+    try {
+      request = JSON.parse(requestBodyText ?? "{}");
+    } catch {
+      request = {};
+    }
+    const fields = isObject(request) ? request : {};
+    const key = `${String(fields.startDate ?? "")}|${String(fields.endDate ?? "")}`;
+    let query = this.queries.get(key);
+    if (!query) {
+      query = {
+        start: finiteNumber(fields.startDate) ?? Number.NEGATIVE_INFINITY,
+        pageSize: finiteNumber(fields.pageSize) ?? 200,
+        events: [],
+        expectedCount: null,
+        complete: false,
+        failed: false,
+      };
+      this.queries.set(key, query);
+    }
+    return query;
   }
 }
 

@@ -171,16 +171,18 @@ Unofficial Cursor dashboard endpoint. Returns paginated usage events with per-re
 
 ```jsonc
 {
-  "startDate": "1774846800000", // unix ms string
-  "endDate": "1775451599999",
+  "startDate": "1795564800000", // unix ms string, 00:00 UTC
+  "endDate": "1795651199999",   // next 00:00 UTC - 1 ms, or now for today
   "page": 1,
-  "pageSize": 100
+  "pageSize": 1000
 }
 ```
 
-OpenUsage fetches up to 10 pages of 200 events (2,000 events), aggregates locally into **Last 7 Days** and **Billing Cycle** windows, emits daily cost/token bar charts, and lists the top models by cost. Failures are nonfatal: the main Credits / Total usage card still renders.
+OpenUsage fetches events from 00:00 UTC of the earlier of the 7-day window start and the billing cycle start, newest first: today (`[00:00 UTC, now]`), then closed days in ranges of up to 7 days, each starting at 00:00 UTC and ending 1 ms before a later 00:00 UTC. Each range is paged with `pageSize` 1000 and up to 10 pages; `pageSize` 2000 returns HTTP 400. All event requests share a deadline (15 s after the first event request, and at most 25 s after the probe start because the desktop host stops a probe at 30 s); each request timeout is capped to the time left. A first page of `{}` is the API answer for a range without events and counts as an empty range. The first failed, capped or late range ends the fetch; older ranges are then missing from the lines and their stored rows stay as they are. The events are aggregated locally into **Last 7 Days** and **Billing Cycle** windows, daily cost/token bar charts, and the top models by cost. Failures are nonfatal: the main Credits / Total usage card still renders.
 
-Cost prefers positive `chargedCents`, then positive `tokenUsage.totalCents` (API price; numeric or numeric strings). Tokens use `tokenUsage.totalTokens` when present. If pagination stops early or hits the page cap, window totals append `· partial` and an **Events Note** marks the sample as partial.
+Token rows are stored per UTC day and per UTC hour. Each refresh deletes and rewrites every daily row of the UTC days it returns; hourly rows (`token_hourly`) are upserted by hour and model, so an hour or model that a refresh does not return keeps its stored value. Rows come only from complete queries, and only for days and hours that start at or after the query start. A query is complete when the totals it reports agree and the event count equals the first reported total (later pages may omit the total), or, when no page carries a total, when a page is shorter than the request `pageSize`. An empty range (`{}`) stores nothing.
+
+Cost prefers positive `chargedCents`, then positive `tokenUsage.totalCents` (API price; numeric or numeric strings). Tokens use `tokenUsage.totalTokens` when present. If a range fails (HTTP error, invalid body, changed total, more events than the total, deadline) or hits the page cap, window totals append `· partial` and an **Events Note** marks the sample as partial.
 
 ## Authentication
 

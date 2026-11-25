@@ -53,6 +53,11 @@
 
 ![ou-status terminal output](docs/screenshots/cli-status.png)
 
+### macOS Menu Bar
+
+The native aisubdash menu-bar app reads either the Web backend through Tailscale or
+a Bun backend started on the Mac. [Build and configure aisubdash for macOS](docs/macos-menu-bar.md).
+
 ### Quick Start (Linux)
 
 ```bash
