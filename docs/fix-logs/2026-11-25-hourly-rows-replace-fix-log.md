@@ -30,3 +30,8 @@ Round 1: Grok APPROVE, Gemini APPROVE (3 LOW), Codex 2 MEDIUM + 1 LOW (Grok part
 
 - Vitest 1397 passed; Bun 656 passed with the known load-dependent ccusage timeout test (failed in the full run, passed 3 of 3 alone at load average about 7; at load average 32 on 2026-11-25 23:10 it failed 3 of 3 alone, so commit `c8699263`'s "passed 3 of 3 alone" does not hold for that run).
 - Real refresh through the default worker into a fresh copy of the live database: 3 `helios-alpha` hours on 2026-11-16..24 before, 0 after; hourly equals daily for 2026-11-16..25 (`../openusage_webui-artifacts/2026-11-25-cursor-per-day-events/hourly-pr/copy3-check.txt`).
+
+## Deploy
+
+- Merged `7b8c3366` through the REST API after two GitHub GraphQL errors on `gh pr merge` (owner: 「持續做完」). Backup `../openusage_webui-artifacts/2026-11-25-cursor-per-day-events/deploy-pr74/live-before-pr74.sqlite` (integrity ok). wt-live `daabd5ed` to `7b8c3366` (also PR #73, no storage change); restarted 2026-11-25 23:54:19 +0800.
+- Cursor refresh: ok, 285 records, 7 s; hourly equals daily for 2026-11-14..25; `helios-alpha` hours on 2026-11-16..24 from 3 to 0; IDE and CLI token fingerprints unchanged; journal without errors.

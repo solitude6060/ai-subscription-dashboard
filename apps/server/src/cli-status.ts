@@ -90,7 +90,8 @@ async function refreshThroughServer(): Promise<ServerRefreshResult[] | null> {
   try {
     const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2000) }).catch((error: unknown) => {
       // A server that does not answer in time may be blocked on a database write; writing locally would
-      // be a second writer. Only a refused connection (no server) falls back to a local refresh.
+      // be a second writer. Without a matching WebUI server (refused connection, non-OK or unreadable
+      // health, another database) the CLI refreshes locally.
       if (error instanceof Error && error.name === "TimeoutError") {
         throw new ServerStateUnknown(`WebUI server on ${base} did not answer /api/health within 2 s; not refreshing locally`);
       }

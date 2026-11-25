@@ -81,8 +81,8 @@ absolute paths with symlinks resolved), the refresh runs through that server (`P
 so the server stays the only writer; if that server request fails (HTTP error or no results list), the
 command exits with an error. Per-provider failures are printed and, as with a local refresh, do not change
 the exit code. A server that does not answer the health
-probe within 2 s also ends the command with an error, since it may be busy writing. When no server listens,
-the command refreshes and writes locally.
+probe within 2 s also ends the command with an error, since it may be busy writing. Without a matching
+server (nothing listening, a non-WebUI answer, or another database), the command refreshes and writes locally.
 
 ## Production-Like Local Use
 

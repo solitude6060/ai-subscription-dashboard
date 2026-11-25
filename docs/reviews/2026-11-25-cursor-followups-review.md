@@ -71,7 +71,28 @@ Lane 3 thread `01a2139c-edca-7a61-80c9-227eaeb1acd5`.
 
 | ID | Finding | Source | Severity | Disposition |
 |---|---|---|---|---|
-| F3-1 | With `busy_timeout`, a server write waiting on an external lock blocks the server's event loop; the CLI's 2 s health probe then times out and the CLI refreshes locally, a second writer again. | Lane 3 | MEDIUM | Fix: a health probe that times out (or answers with an error status) is an unknown server state; the CLI exits with an error and does not write. Only a refused connection (no server) refreshes locally. `busy_timeout` stays for the server's own writes. Test first. |
+| F3-1 | With `busy_timeout`, a server write waiting on an external lock blocks the server's event loop; the CLI's 2 s health probe then times out and the CLI refreshes locally, a second writer again. | Lane 3 | MEDIUM | Fix: a health probe that times out is an unknown server state; the CLI exits with an error and does not write. Without a matching WebUI server (refused connection, non-OK or unreadable health, another database) the CLI refreshes locally. `busy_timeout` stays for the server's own writes. Test first. |
 | F3-2 | The plugin accepts a page with a non-object entry that the collector rejects, so the card shows an unqualified total. | Lane 3 | MEDIUM | Fix: a non-object entry is a self-contradicting answer in the plugin too. Test first. |
 | F3-3 | The write-lock test does not assert that the child took the lock or exited cleanly. | Lanes 2, 3 | LOW | Fix: assert the `locked` message and exit 0; kill the child in `finally`. |
 | F3-4 | The Events Note row and the plan omit the zero-event `incomplete fetch` note and the deadline exception for HTTP failures. | Lanes 2, 3 | LOW | Fix the docs and the plan. |
+
+## Round 4 (second remediation re-review)
+
+- Reviewed `ee0ff789..8035a8c1` (review records excluded). Prompt `pr75-round4/prompt.md` (SHA-256 `d398c22d…c47938f806`).
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, no findings | `pr75-round4/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` | high | APPROVE, 2 LOW | `pr75-round4/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, `~/.codex-family` | high | REQUEST_CHANGES, 1 MEDIUM, 2 LOW | `pr75-round4/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 3 thread `01a213a9-4943-7d41-8f0f-1c6428df5bb8`. Triage rule from the owner (2026-11-26, 「不要太無限上綱…不是一直雞蛋挑骨頭」): a finding blocks only with a trigger reachable in real use and a real impact; otherwise it is LOW at most.
+
+| ID | Finding | Source | Severity | Disposition |
+|---|---|---|---|---|
+| F4-1 | A health response whose body stalls after the headers falls back to a local refresh. | Lane 3 (MEDIUM) | LOW | Not changed: the WebUI server answers `/api/health` with `Response.json(...)` built before the response (`apps/server/src/index.ts` health handler), so headers and body are sent together; a server blocked on a write sends no headers and takes the timeout path. No real trigger. |
+| F4-2 | The CLI comment, README and round 3 record state a narrower local-fallback rule than the code. | Lanes 2, 3 | LOW | Fixed after the round: comment and docs only (no code token changed). |
+| F4-3 | The endpoint paragraph and the Events Note row describe zero-event notes differently. | Lane 3 | LOW | Fixed after the round (docs). |
+| F4-4 | The 3 s health stub leaves 1 s of margin over the 2 s probe timeout. | Lane 2 | LOW | Deferred: the CLI exits at about 2.1 s; a flake needs a scheduler pause over 1 s in the child. |
+
+Gate: lanes 1 and 2 APPROVE `8035a8c1`; F4-1 reclassified with the evidence above. The commit after `8035a8c1` changes a code comment and docs only.
