@@ -7,7 +7,7 @@ import { isProviderRefreshable, providerCards } from "../../../apps/web/src/prov
 import type { UsageRecord } from "../../core/src/types";
 import { SqliteStorage } from "../../storage/src/index";
 import * as providers from "../src/index";
-import type { CcusageCommandRunner } from "../src/providers/ccusage";
+import { runCommand, type CcusageCommandRunner } from "../src/providers/ccusage";
 import { ColabProvider } from "../src/providers/colab";
 
 const observedUsage = [
@@ -101,6 +101,23 @@ describe("ColabProvider", () => {
     const { provider } = makeProvider({ ok: false, stdout: "", stderr: "colab command timed out" });
 
     await expect(provider.refresh()).rejects.toThrow(/colab command timed out/);
+  });
+
+  test("the shared runner times out when the command exits before its output closes", async () => {
+    const parent = `
+      const child = Bun.spawn([process.execPath, "-e", "await Bun.sleep(750)"], {
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      child.unref();
+      process.exit(0);
+    `;
+
+    await expect(runCommand(process.execPath, ["-e", parent], 300)).resolves.toEqual({
+      ok: false,
+      stdout: "",
+      stderr: `${process.execPath} command timed out`,
+    });
   });
 
   test("refresh finds the executable using the override, then PATH, then the home directory", async () => {
