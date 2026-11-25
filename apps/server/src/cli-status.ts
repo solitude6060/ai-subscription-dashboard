@@ -70,6 +70,8 @@ type ServerRefreshResult = { providerId: string; ok: boolean; records?: number; 
 
 // The WebUI server refreshes the same database through its own queue. A second writer can commit an
 // older batch after a newer one, so a running server on this database does the refresh instead.
+class ServerStateUnknown extends Error {}
+
 export function webuiPort(value: string | undefined): number {
   const port = Number(value);
   return value && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : 6736;
@@ -86,13 +88,21 @@ function canonicalPath(path: string): string {
 async function refreshThroughServer(): Promise<ServerRefreshResult[] | null> {
   const base = `http://127.0.0.1:${webuiPort(process.env.OPENUSAGE_WEBUI_PORT)}`;
   try {
-    const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2000) });
+    const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2000) }).catch((error: unknown) => {
+      // A server that does not answer in time may be blocked on a database write; writing locally would
+      // be a second writer. Only a refused connection (no server) falls back to a local refresh.
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new ServerStateUnknown(`WebUI server on ${base} did not answer /api/health within 2 s; not refreshing locally`);
+      }
+      throw error;
+    });
     if (!health.ok) return null;
     const info = (await health.json()) as { databasePath?: unknown };
     // A relative path is relative to the server's working directory, which the CLI cannot know.
     if (typeof info.databasePath !== "string" || !isAbsolute(info.databasePath)) return null;
     if (canonicalPath(info.databasePath) !== canonicalPath(getDatabasePath())) return null;
-  } catch {
+  } catch (error) {
+    if (error instanceof ServerStateUnknown) throw error;
     return null;
   }
   const response = await fetch(`${base}/api/providers/refresh`, { method: "POST" });

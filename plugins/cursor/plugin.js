@@ -700,6 +700,17 @@
           break
         }
         var batch = empty ? [] : data.usageEventsDisplay
+        // The host stores no rows for a range whose list has a non-object entry; flag it the same way.
+        var malformed = false
+        for (var m = 0; m < batch.length; m++) {
+          if (!batch[m] || typeof batch[m] !== "object" || Array.isArray(batch[m])) malformed = true
+        }
+        if (malformed) {
+          ctx.host.log.warn("usage events: malformed entry")
+          incomplete = true
+          inconsistent = true
+          break
+        }
         var total = typeof data.totalUsageEventsCount === "number" ? data.totalUsageEventsCount : null
         // The host stores a range only with a stable total and an exact count; flag the same cases here.
         if (total != null && expectedTotal != null && total !== expectedTotal) {
