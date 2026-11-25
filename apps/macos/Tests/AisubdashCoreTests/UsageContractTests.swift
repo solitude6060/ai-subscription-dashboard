@@ -302,9 +302,12 @@ final class UsageContractTests: XCTestCase {
         XCTAssertNil(dashboard.accounts[1].observedAt)
     }
 
-    func testDecodesTextLinesAsAccountDetails() throws {
+    func testDecodesTextLinesAsDetailsOnlyForAccountsWithoutQuotas() throws {
         let providers = Data("""
-        [{ "providerId": "colab", "name": "Google Colab", "enabled": true }]
+        [
+          { "providerId": "colab", "name": "Google Colab", "enabled": true },
+          { "providerId": "codex", "name": "Codex", "enabled": true }
+        ]
         """.utf8)
         let snapshots = Data("""
         [
@@ -313,27 +316,38 @@ final class UsageContractTests: XCTestCase {
             "startedAt": "2026-11-25T02:30:00Z",
             "raw": {
               "lines": [
-                { "type": "text", "label": "Balance", "value": "341.98 compute units" },
-                { "type": "progress", "label": "5h", "used": 10, "limit": 100 },
-                { "type": "text", "label": "Usage Rate", "value": "0.00 units/hr" },
                 { "type": "text", "label": "", "value": "no label" },
                 { "type": "text", "label": "No value" },
                 { "type": "text", "label": "Numeric", "value": 3 },
-                { "type": "badge", "label": "Plan", "text": "Pro" }
+                { "type": "badge", "label": "Plan", "text": "Pro" },
+                { "type": "text", "label": "Balance", "value": "341.98 compute units" },
+                { "type": "text", "label": "Usage Rate", "value": "0.00 units/hr" },
+                { "type": "text", "label": "Active Sessions", "value": "0" },
+                { "type": "text", "label": "Fourth", "value": "not shown" }
+              ]
+            }
+          },
+          {
+            "providerId": "codex",
+            "startedAt": "2026-11-25T02:30:00Z",
+            "raw": {
+              "lines": [
+                { "type": "progress", "label": "5h", "used": 10, "limit": 100 },
+                { "type": "text", "label": "Today", "value": "$1.00" }
               ]
             }
           }
         ]
         """.utf8)
 
-        let account = try XCTUnwrap(
-            UsageContractDecoder.decode(providersData: providers, snapshotsData: snapshots).accounts.first
-        )
+        let accounts = try UsageContractDecoder.decode(providersData: providers, snapshotsData: snapshots).accounts
 
-        XCTAssertEqual(account.details.map(\.label), ["Balance", "Usage Rate"])
-        XCTAssertEqual(account.details.map(\.value), ["341.98 compute units", "0.00 units/hr"])
-        XCTAssertEqual(Set(account.details.map(\.id)).count, 2)
-        XCTAssertEqual(account.quotas.map(\.label), ["5h"])
+        // The panel is compact: the first three text lines, as on the web card summary.
+        XCTAssertEqual(accounts[0].details.map(\.label), ["Balance", "Usage Rate", "Active Sessions"])
+        XCTAssertEqual(accounts[0].details.map(\.value), ["341.98 compute units", "0.00 units/hr", "0"])
+        XCTAssertEqual(Set(accounts[0].details.map(\.id)).count, 3)
+        XCTAssertEqual(accounts[1].quotas.map(\.label), ["5h"])
+        XCTAssertTrue(accounts[1].details.isEmpty)
     }
 
     func testDecodesUsageAsEmittedByTheBunAPI() throws {
