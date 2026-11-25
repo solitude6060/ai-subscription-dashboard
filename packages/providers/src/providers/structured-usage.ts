@@ -96,6 +96,7 @@ export function normalizeCcusageHourlyBlocks(
 
 type CursorEventQuery = {
   start: number;
+  end: number;
   pageSize: number;
   events: JsonObject[];
   expectedCount: number | null;
@@ -141,6 +142,8 @@ export class CursorUsageCollector {
   records(providerId: ProviderId): UsageRecord[] {
     const daily: TokenTotals = new Map();
     const hourly: TokenTotals = new Map();
+    // A day is complete only when every query that contributes to it covers the whole UTC day.
+    const completeDays = new Map<string, boolean>();
     for (const query of this.queries.values()) {
       if (query.failed || !query.complete) continue;
       for (const event of query.events) {
@@ -154,14 +157,21 @@ export class CursorUsageCollector {
         const day = `${timestamp.slice(0, 10)}T00:00:00.000Z`;
         const hour = `${timestamp.slice(0, 13)}:00:00.000Z`;
         // A day or hour that starts before the query start is partial; storing it would replace the full stored total.
-        if (Date.parse(day) >= query.start) addTokenTotal(daily, day, model, tokens, costUsd);
+        if (Date.parse(day) >= query.start) {
+          addTokenTotal(daily, day, model, tokens, costUsd);
+          const covers = Number.isFinite(query.start) && Number.isFinite(query.end) &&
+            query.end >= Date.parse(day) + 86_400_000 - 1;
+          completeDays.set(day, (completeDays.get(day) ?? true) && covers);
+        }
         if (Date.parse(hour) >= query.start) addTokenTotal(hourly, hour, model, tokens, costUsd);
       }
     }
 
     return [
-      ...[...daily.values()].map(({ startedAt, model, tokens, costUsd, costKnown }) =>
-        createTokenRecord(providerId, startedAt, model, tokens, "cursor-event", costKnown ? costUsd : undefined)),
+      ...[...daily.values()].map(({ startedAt, model, tokens, costUsd, costKnown }) => ({
+        ...createTokenRecord(providerId, startedAt, model, tokens, "cursor-event", costKnown ? costUsd : undefined),
+        ...(completeDays.get(startedAt) ? { completeDay: true } : {}),
+      })),
       ...[...hourly.values()].map(({ startedAt, model, tokens, costUsd, costKnown }) =>
         createHourlyTokenRecord(providerId, startedAt, model, tokens, "cursor-event", costKnown ? costUsd : undefined)),
     ];
@@ -180,6 +190,7 @@ export class CursorUsageCollector {
     if (!query) {
       query = {
         start: finiteNumber(fields.startDate) ?? Number.NEGATIVE_INFINITY,
+        end: finiteNumber(fields.endDate) ?? Number.POSITIVE_INFINITY,
         pageSize: finiteNumber(fields.pageSize) ?? 200,
         events: [],
         expectedCount: null,

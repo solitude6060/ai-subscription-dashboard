@@ -85,6 +85,9 @@ export interface UsageRecord {
   source: UsageSource;
   raw?: unknown;
   createdAt?: string;
+  // Daily token row whose source query covered the whole UTC day; storage then replaces that day's
+  // hourly rows too. Not stored.
+  completeDay?: boolean;
 }
 
 export interface ProviderStatus {
