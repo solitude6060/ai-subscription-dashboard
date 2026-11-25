@@ -158,7 +158,7 @@ Amp、Antigravity、Claude Code、Codex、Cursor、Devin、Factory、Grok Build�
 
 Grok Build 的 Today／Yesterday／Last 30 Days 與 Tokens 頁共用本機完成回合紀錄。花費使用 CLI 記錄的費用；沒有費用的回合仍計入 token，費用加總為 $0。整個期間都沒有費用紀錄時，只顯示 token；沒有 token 時省略該期間。Today／Yesterday 使用伺服器本地日，Last 30 Days 涵蓋更新當下往前 30 × 24 小時；Tokens 頁的 Grok 每日用量仍維持 UTC 日。
 
-Google Colab 由 WebUI 伺服器以 `colab usage` 讀取。請在伺服器使用的作業系統帳號安裝並登入 `google-colab-cli`。若執行檔不在伺服器的 `PATH` 或 `$HOME/.local/bin/colab`，可在啟動伺服器前用 `COLAB_CLI_PATH` 指定完整路徑。到 **Providers** 頁更新 **Google Colab** 後，儀表板會顯示運算單位餘額。更新出錯時，可在 **Providers** 頁查看原因。
+Google Colab 由 WebUI 伺服器以 `colab usage` 讀取。請在伺服器使用的作業系統帳號安裝並登入 `google-colab-cli`。可在啟動伺服器前用 `COLAB_CLI_PATH` 指定執行檔的完整路徑，路徑無效時更新會失敗。變數未設定或只有空白時，伺服器依序查找自身的 `PATH` 和 `$HOME/.local/bin/colab`。到 **Providers** 頁更新 **Google Colab** 後，儀表板會顯示運算單位餘額。更新出錯時，可在 **Providers** 頁查看原因。
 
 ### 5.3 Sessions
 

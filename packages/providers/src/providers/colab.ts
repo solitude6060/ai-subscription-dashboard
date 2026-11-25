@@ -33,7 +33,7 @@ export class ColabProvider implements UsageProvider {
   async refresh(): Promise<UsageRecord[]> {
     const executable = this.findExecutable();
     if (!executable) {
-      throw new Error("Google Colab executable not found. Install google-colab-cli or set COLAB_CLI_PATH.");
+      throw new Error("Google Colab executable not found. Set COLAB_CLI_PATH to an executable or unset it to use an installed google-colab-cli.");
     }
 
     const result = await this.runner(executable, ["usage"], COMMAND_TIMEOUT_MS, { env: this.env });
@@ -72,9 +72,10 @@ export class ColabProvider implements UsageProvider {
 
   private findExecutable(): string | null {
     const { COLAB_CLI_PATH, PATH, HOME } = this.env;
+    const override = COLAB_CLI_PATH?.trim();
     const options = { PATH: PATH ?? "" };
-    return (COLAB_CLI_PATH ? Bun.which(COLAB_CLI_PATH, options) : null)
-      ?? Bun.which("colab", options)
+    if (override) return Bun.which(override, options);
+    return Bun.which("colab", options)
       ?? (HOME ? Bun.which(join(HOME, ".local", "bin", "colab"), options) : null);
   }
 }

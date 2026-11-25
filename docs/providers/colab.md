@@ -5,7 +5,7 @@ The WebUI displays the Google Colab compute-unit balance for the account signed 
 ## Setup
 
 1. Install `google-colab-cli` with `uv tool install google-colab-cli` on the WebUI server. Use the OS account that runs the server and sign in with the CLI.
-2. Run `colab usage` with that account and check that it prints `Current balance`. The server uses the first executable it finds in `COLAB_CLI_PATH`, its own `PATH`, or `$HOME/.local/bin/colab`. Set `COLAB_CLI_PATH` in the server environment to specify an absolute path.
+2. Run `colab usage` with that account and check that it prints `Current balance`. To specify an executable, set `COLAB_CLI_PATH` to its absolute path in the server environment. The server trims surrounding whitespace and reports an error if the resulting non-empty path is invalid. When the variable is unset or blank, the server checks its own `PATH`, then `$HOME/.local/bin/colab`.
 3. On the **Providers** page, refresh **Google Colab**.
 
 ## Dashboard Lines

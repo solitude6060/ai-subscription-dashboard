@@ -40,9 +40,10 @@ Provider id `colab`, name `Google Colab`, class `ColabProvider` in
 `packages/providers/src/providers/colab.ts`. It follows the two existing native providers:
 dependency injection as in `MiniMaxProvider`, command execution as in `CcusageProvider`.
 
-Executable lookup, in order: the `COLAB_CLI_PATH` environment variable when set; `colab` on
-`PATH`; `$HOME/.local/bin/colab`. `detect()` returns whether one of these resolves to an
-existing executable. It runs no command.
+Executable lookup uses the trimmed `COLAB_CLI_PATH` value when it is non-empty. If that value
+does not resolve to an executable, `detect()` returns false and `refresh()` reports an error
+naming `COLAB_CLI_PATH`. When the variable is unset or blank, lookup checks for `colab` on
+`PATH`, then at `$HOME/.local/bin/colab`. Detection runs no command.
 
 `refresh()` runs `<executable> usage` with the provider's environment, stdin ignored and a
 20 second timeout. The command runner is injected through the constructor. It shares the spawn,
