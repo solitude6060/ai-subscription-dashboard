@@ -107,6 +107,40 @@ describe("ColabProvider", () => {
     }]);
   });
 
+  test("refresh accepts comma thousands separators in all three fields", async () => {
+    const { provider } = makeProvider({
+      ok: true,
+      stdout: "Current balance: 12,345.00 compute units\nUsage rate: 1,000.00/hr\nActive assignments: 1,234",
+    });
+
+    const refresh = provider.refresh().then((records) => records.map((record) => record.raw));
+    await expect(refresh).resolves.toEqual([{
+      lines: [
+        { type: "text", label: "Balance", value: "12,345.00 compute units" },
+        { type: "text", label: "Usage Rate", value: "1,000.00 units/hr, 12.3 h left" },
+        { type: "text", label: "Active Sessions", value: "1,234" },
+      ],
+    }]);
+  });
+
+  test.each([
+    ["a negative balance", "-37.00", "3.00", "3.00 units/hr"],
+    ["a zero balance", "0.00", "3.00", "3.00 units/hr, 0.0 h left"],
+    ["an infinite estimate", "1" + "0".repeat(308), "0.1", "0.1 units/hr"],
+  ])("refresh formats the usage rate with %s", async (_description, balance, rate, expectedRate) => {
+    const { provider } = makeProvider({
+      ok: true,
+      stdout: `Current balance: ${balance} compute units\nUsage rate: ${rate}/hr`,
+    });
+
+    expect((await provider.refresh()).map((record) => record.raw)).toEqual([{
+      lines: [
+        { ...balanceLine, value: `${balance} compute units` },
+        { ...zeroRateLine, value: expectedRate },
+      ],
+    }]);
+  });
+
   test("missing optional lines leave only the balance", async () => {
     const { provider } = makeProvider({ ok: true, stdout: "Current balance: 341.98 compute units" });
 
@@ -117,6 +151,7 @@ describe("ColabProvider", () => {
     ["missing", "Usage rate: 0.00/hr\nActive assignments: 0"],
     ["non-numeric", "Current balance: unknown compute units"],
     ["wrong case", "Current Balance: 341.98 compute units"],
+    ["misplaced comma", "Current balance: 12,34.00 compute units"],
   ])("refresh rejects a %s balance", async (_description, stdout) => {
     const { provider } = makeProvider({ ok: true, stdout });
 
@@ -125,7 +160,13 @@ describe("ColabProvider", () => {
 
   test.each([
     ["Usage rate", "Usage rate: stopped/hr"],
+    ["Usage rate", "Usage rate: +1.00/hr"],
+    ["Usage rate", "Usage rate: -1.00/hr"],
+    ["Usage rate", "Usage rate: 1234,567/hr"],
     ["Active assignments", "Active assignments: 0.5"],
+    ["Active assignments", "Active assignments: +1"],
+    ["Active assignments", "Active assignments: -1"],
+    ["Active assignments", "Active assignments: 1,00"],
   ])("refresh rejects a malformed %s line", async (label, line) => {
     const { provider } = makeProvider({
       ok: true,
