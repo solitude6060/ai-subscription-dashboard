@@ -28,6 +28,14 @@ MIN_OS_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$P
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 [[ "$SDK_VERSION" == *.* ]] || SDK_VERSION="$SDK_VERSION.0"
 
+normalize_sdk_version() {
+  local version="$1"
+  while [[ "$version" == *.0 ]]; do
+    version="${version%.0}"
+  done
+  printf '%s\n' "$version"
+}
+
 # SwiftPM can record the deployment target as the SDK version, so state both to the linker.
 BUILD_ARGS=(
   --package-path "$SCRIPT_DIR"
@@ -54,7 +62,7 @@ RECORDED_SDK="$(otool -l "$BIN_PATH" | awk '
   found && $1 == "sdk" && sdk == "" { sdk = $2 }
   END { if (sdk != "") print sdk }
 ')"
-if [[ "$RECORDED_SDK" != "$SDK_VERSION" ]]; then
+if [[ "$(normalize_sdk_version "$RECORDED_SDK")" != "$(normalize_sdk_version "$SDK_VERSION")" ]]; then
   echo "Error: executable records SDK '$RECORDED_SDK', expected the build SDK $SDK_VERSION." >&2
   exit 1
 fi
