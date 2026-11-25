@@ -197,7 +197,7 @@ describe("ColabProvider", () => {
     }
   }, 30_000);
 
-  test("refresh finds the executable using the override, then PATH, then the home directory", async () => {
+  test("only a blank or unset override permits PATH and home lookup", async () => {
     const dir = mkdtempSync(join(import.meta.dir, ".colab-executables-"));
     try {
       const override = join(dir, "custom-colab");
@@ -213,9 +213,18 @@ describe("ColabProvider", () => {
       const nonExecutable = join(dir, "not-executable");
       writeFileSync(nonExecutable, "");
 
+      const fallbackEnv = { PATH: pathDir, HOME: dir };
+      for (const override of [nonExecutable, join(dir, "missing")]) {
+        const { provider, calls } = makeProvider(undefined, { ...fallbackEnv, COLAB_CLI_PATH: override });
+        await expect(provider.detect()).resolves.toBe(false);
+        await expect(provider.refresh()).rejects.toThrow(/executable not found.*COLAB_CLI_PATH/i);
+        expect(calls).toEqual([]);
+      }
+
       for (const [env, command] of [
-        [{ COLAB_CLI_PATH: override, PATH: pathDir, HOME: dir }, override],
-        [{ COLAB_CLI_PATH: nonExecutable, PATH: pathDir, HOME: dir }, pathColab],
+        [{ ...fallbackEnv, COLAB_CLI_PATH: `  ${override}\t` }, override],
+        [{ ...fallbackEnv, COLAB_CLI_PATH: " \t " }, pathColab],
+        [fallbackEnv, pathColab],
         [{ PATH: dir, HOME: dir }, homeColab],
       ] as const) {
         const { provider, calls } = makeProvider(undefined, env);
