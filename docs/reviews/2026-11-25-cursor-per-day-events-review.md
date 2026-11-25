@@ -33,3 +33,28 @@ The orchestrator is Claude Code (Anthropic); the lanes are xAI, Google and OpenA
 | R1-8 | Pagination tests do not assert that the fetch stops after the page cap, and no test covers `now` exactly at 00:00 UTC. | Lane 3 | LOW | `plugins/cursor/plugin.test.js` page-cap and mid-fetch tests. | Fix: assert the request count after the cap; add a midnight test. |
 | R1-9 | No collector test pins a query start exactly at 00:00 UTC (`>=` against `>`). | Lane 1 | LOW | `cursor-usage-collector.test.ts` uses 07:30. | Fix: add the test. |
 | R1-10 | `docs/providers/cursor.md` request example still shows a 7-day range and `pageSize` 100. | Lane 1 | LOW | Example at the `get-filtered-usage-events` request body. | Fix the example. |
+
+## Round 2 (remediation re-review)
+
+- Reviewed: `32e06c2b..6d7e0336` (code, tests, provider docs, plan; review records excluded) and the backfill script diff (`backfill.round1.ts` to `backfill.ts`). Prompt `round2/prompt.md` (SHA-256 `3a4e1b2e…863890`).
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, no findings | `round2/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` (bwrap read-only, SSH variables unset) | high | REQUEST_CHANGES, 2 MEDIUM, 1 LOW | `round2/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, home `~/.codex-family` (read-only sandbox) | high | REQUEST_CHANGES, 5 MEDIUM, 1 LOW | `round2/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 2 `init` reports `gemini-4-neon-high`, result `SUCCESS`. Lane 3 thread `01a212f8-61e9-7253-971c-2496c7b993a9`. The checkout stayed at `6d7e0336` with no tracked changes.
+
+Gate split: six of the lane 3 MEDIUM findings over both rounds concern `backfill.ts`, which is not merged. From round 3 the PR #72 gate covers the repository diff only. The script has its own review record (`docs/reviews/2026-11-25-cursor-backfill-script-review.md`) and must pass it before the live write.
+
+| ID | Finding | Source | Severity | Verified evidence | Disposition |
+|---|---|---|---|---|---|
+| R2-1 | The plugin checks the current page's total, so a later page without a total (or `{}`) can end a range as complete while the collector rejects it. | Lane 2, lane 3 | MEDIUM | `fetchFilteredUsageEvents`: `all.length > total`, `all.length < total`, `all.length >= total` use `total` of the current page; `expectedTotal` is only compared for changes. | Fix: use the first known total on every page. Tests first. |
+| R2-2 | The empty-range rule accepts `{"error": …}`, `[]` and a page-2 `{}`. | Lane 2, lane 3 | MEDIUM | `empty` is true for any object without `usageEventsDisplay` and without a truthy total; arrays are objects. The API's empty answer is a zero-key object (`empty-range-check.txt`). | Fix: empty only for a zero-key plain object on page 1. Tests first. |
+| R2-3 | The events deadline starts after the other requests; on the desktop host it can still use the time left in the 30 s probe. | Lane 3 | MEDIUM | `deadline = Date.now() + EVENTS_DEADLINE_MS` in `appendUsageEventBreakdown`; usage, plan, credits and Stripe requests have 10 s timeouts. Before this PR the events fetch had no limit (10 pages of 15 s). | Fix: the events deadline is also capped at 25 s after the probe start. Test first. |
+| R2-4 | Backfill guard, write and verification are not one transaction; stale hourly keys remain after a daily replace. | Lane 3 | MEDIUM | `backfill.ts` closes the read handle, writes through `SqliteStorage`, then verifies. | Script review: one write transaction (guard, delete the day's daily and hourly rows, insert, verify, roll back on a mismatch). |
+| R2-5 | Collector records ignore `endDate`; a response with an event outside the requested day produces rows for another day. | Lane 3 | MEDIUM | `CursorUsageCollector.records()` filters by start only. Plugin ranges are disjoint and every probed event was inside its range (`probe-days.txt`, `range-paging-check.txt`). | Collector: deferred with R1-7 (no caller sends an event outside its range). Script review: fail a day when any event is outside it. |
+| R2-6 | Backfill aborts on a JSON `null` body. | Lane 2, lane 3 | MEDIUM | `body.usageEventsDisplay` on `null` throws outside the per-day `try`. | Script review: require a plain object. |
+| R2-7 | Backfill counts zero-token `tokenUsage` objects as token events and can report a false collector rejection. | Lane 2 | LOW | `tokenEvents` counts any `tokenUsage` object; the collector skips zero totals. | Script review: count events with a positive total. |
+| R2-8 | Provider docs omit the no-total fallback, the `{}` answer and the daily-replace / hourly-upsert difference. | Lane 3 | LOW | `docs/providers/cursor.md` storage paragraph. | Fix the paragraph. |
