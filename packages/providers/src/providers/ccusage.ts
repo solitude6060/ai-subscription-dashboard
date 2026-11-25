@@ -168,9 +168,12 @@ export async function runCommand(
   });
   const exited = await Promise.race([completion, timedOut]).finally(() => clearTimeout(timeout));
   if (exited === "timeout") {
+    // Output alone can time out after the command's PID has been released.
+    if (!timeoutIncludesOutput || (proc.exitCode === null && proc.signalCode === null)) {
+      await killProcessTree(proc.pid);
+      await proc.exited.catch(() => undefined);
+    }
     outputAbort?.abort();
-    await killProcessTree(proc.pid);
-    await proc.exited.catch(() => undefined);
     await Promise.all(output.map((read) => read.catch(() => "")));
     return { ok: false, stdout: "", stderr: `${name} command timed out` };
   }
