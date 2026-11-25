@@ -210,7 +210,10 @@ export async function listDescendantPids(
   psCommand = ["ps", "-eo", "pid=,ppid="],
   timeoutMs = 2_000,
 ): Promise<number[]> {
+  // On expiry the listing is empty; the caller still signals the group and the root.
   const ps = Bun.spawn(psCommand, {
+    timeout: timeoutMs,
+    killSignal: "SIGKILL",
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",

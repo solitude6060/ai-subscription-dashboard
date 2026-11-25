@@ -200,7 +200,7 @@ export function orderCardGroups(saved: string[], groups: ProviderCardGroup[]): s
 
 /** Time of the reading a card shows; a failed refresh does not count as an update. */
 export function lastUpdatedAt(status: ProviderStatus | undefined): string | undefined {
-  return status?.lastRefreshAt;
+  return status?.lastSuccessAt ?? (status?.lastError ? undefined : status?.lastRefreshAt);
 }
 
 function latestRefresh(members: ProviderData[]): string | undefined {

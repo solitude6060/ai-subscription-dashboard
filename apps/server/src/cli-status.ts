@@ -114,7 +114,7 @@ async function main() {
     console.log("");
   }
 
-  const records = await storage.listUsageRecords({ limit: 100 });
+  const records = await storage.listLatestUsageSnapshots();
   const statuses = await storage.listProviderStatus();
   const statusMap = new Map(statuses.map((s) => [s.providerId, s]));
 
@@ -185,11 +185,10 @@ async function main() {
       }
     }
 
-    if (status?.lastRefreshAt) {
-      const ago = formatRelative(
-        new Date(Date.now() - (Date.now() - new Date(status.lastRefreshAt).getTime())).toISOString(),
-      );
-      console.log(`  ${DIM}Updated ${new Date(status.lastRefreshAt).toLocaleString()}${RESET}`);
+    // A failed refresh does not count as an update of the reading.
+    const updatedAt = status?.lastSuccessAt ?? (status?.lastError ? undefined : status?.lastRefreshAt);
+    if (updatedAt) {
+      console.log(`  ${DIM}Updated ${new Date(updatedAt).toLocaleString()}${RESET}`);
     }
     console.log("");
   }
