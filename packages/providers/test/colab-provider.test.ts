@@ -135,10 +135,21 @@ describe("ColabProvider", () => {
     await expect(provider.refresh()).rejects.toThrow(new RegExp(`Unrecognised Google Colab usage output.*${label}`));
   });
 
-  test("refresh reports a failed command with only the first line of stderr", async () => {
-    const { provider } = makeProvider({ ok: false, stdout: observedUsage, stderr: "Sign in first\r\nDebug details" });
+  test("refresh reports a failed command with the first non-empty stderr line", async () => {
+    const { provider } = makeProvider({
+      ok: false,
+      stdout: observedUsage,
+      stderr: "\r\n  \r\n  Sign in first  \r\nDebug details",
+    });
 
     await expect(provider.refresh()).rejects.toThrow(/^Google Colab command failed: Sign in first$/);
+  });
+
+  test("refresh caps the stderr detail at 200 characters", async () => {
+    const detail = "x".repeat(199) + "🔒";
+    const { provider } = makeProvider({ ok: false, stdout: "", stderr: `${detail} extra\nDebug details` });
+
+    await expect(provider.refresh()).rejects.toThrow(new RegExp(`^Google Colab command failed: ${detail}$`));
   });
 
   test("refresh reports a timeout from the command runner", async () => {
