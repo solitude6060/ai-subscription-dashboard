@@ -47,3 +47,12 @@ Lane 3 thread `01a21393-2bb1-7352-bba3-a59967a4d908`.
 | F2-6 | The subprocess test uses `tmpdir()`. | Lane 3 | LOW | Not changed: per-test directories created with `mkdtempSync(tmpdir())` and removed in `afterEach` are disposable scratch, the convention of the existing storage and provider tests (for example `packages/storage/test/token-hourly.test.ts`). |
 | F2-7 | The plan lists the HTTP 500 test as a base lock. | Lanes 1, 2, 3 | LOW | Fix: three locks (relative reported path, another database, no server); the two `completeDay` collector tests are locks too. |
 | F2-8 | No test that `/api/health` reports an absolute path for a relative `OPENUSAGE_WEBUI_DIR`. | Lane 2 | LOW | Fix: test added (fails on `7b8c3366`, passes since `7c963877`). |
+
+Repairs after round 2:
+
+```text
+21ce113d docs: status:refresh exit rules and test baselines (review F2-2, F2-7)
+867278da fix: PR #75 review round 2 (F2-1..F2-5)
+f2fa3f4c test: PR #75 review round 2 (F2-1..F2-5, F2-8)
+bbd9571d docs: record PR #75 review round 2 and triage
+```
