@@ -2781,4 +2781,28 @@ describe("cursor usage event ranges", () => {
 
     expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
   })
+
+  it("shows the incomplete-fetch note for an empty page below a known total", async () => {
+    const { ctx } = setup(() => ({
+      status: 200,
+      bodyText: JSON.stringify({ totalUsageEventsCount: 5, usageEventsDisplay: [] }),
+    }))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("shows the time-limit note for an HTTP error returned after the events deadline", async () => {
+    const { ctx } = setup(() => {
+      vi.setSystemTime(Date.now() + 16000)
+      return { status: 504, bodyText: "gateway timeout" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
+  })
 })

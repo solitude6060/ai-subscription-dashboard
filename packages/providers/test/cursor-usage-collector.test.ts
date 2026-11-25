@@ -195,3 +195,13 @@ describe("CursorUsageCollector bounded queries", () => {
     expect(collector.records("cursor")).toEqual([]);
   });
 });
+
+describe("CursorUsageCollector malformed entries", () => {
+  test("fails a bounded query whose page contains a non-object entry", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T01:00:00.000Z", 3), null]),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+
+    expect(collector.records("cursor")).toEqual([]);
+  });
+});

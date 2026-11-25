@@ -31,7 +31,7 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-function stubServer(databasePath: string, refreshStatus = 200) {
+function stubServer(databasePath: string, refreshStatus = 200, refreshBody: unknown = { ok: true, results: [{ providerId: "cursor", ok: true, records: 3 }] }) {
   const posts: string[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -42,7 +42,7 @@ function stubServer(databasePath: string, refreshStatus = 200) {
       if (request.method === "POST" && url.pathname === "/api/providers/refresh") {
         posts.push(url.pathname);
         if (refreshStatus !== 200) return new Response("boom", { status: refreshStatus });
-        return Response.json({ ok: true, results: [{ providerId: "cursor", ok: true, records: 3 }] });
+        return Response.json(refreshBody);
       }
       return new Response("not found", { status: 404 });
     },
@@ -143,6 +143,18 @@ describe("status:refresh beside a running WebUI server", () => {
       expect(posts).toEqual(["/api/providers/refresh"]);
       expect(exitCode).not.toBe(0);
       expect(stderr).toContain("HTTP 500");
+      expect(output).not.toContain("Refreshing providers...");
+    } finally {
+      server.stop(true);
+    }
+  }, 30_000);
+
+  test("fails without a local write when the server answers without a results list", async () => {
+    const { server, posts } = stubServer(join(home, "data", "openusage.sqlite"), 200, { ok: true });
+    try {
+      const { output, exitCode } = await runRefresh(server.port);
+      expect(posts).toEqual(["/api/providers/refresh"]);
+      expect(exitCode).not.toBe(0);
       expect(output).not.toContain("Refreshing providers...");
     } finally {
       server.stop(true);
