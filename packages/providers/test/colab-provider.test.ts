@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createRequestHandler } from "../../../apps/server/src/index";
 import { isProviderRefreshable, providerCards } from "../../../apps/web/src/provider-ui";
 import type { UsageRecord } from "../../core/src/types";
@@ -105,7 +105,9 @@ describe("ColabProvider", () => {
 
   test("the shared runner times out when the command exits before its output closes", async () => {
     const parent = `
-      const child = Bun.spawn([process.execPath, "-e", "await Bun.sleep(750)"], {
+      const command = [process.execPath, "-e", "await Bun.sleep(2000)"];
+      if (process.platform === "linux") command.unshift("setsid");
+      const child = Bun.spawn(command, {
         stdout: "inherit",
         stderr: "inherit",
       });
@@ -113,11 +115,19 @@ describe("ColabProvider", () => {
       process.exit(0);
     `;
 
-    await expect(runCommand(process.execPath, ["-e", parent], 300)).resolves.toEqual({
-      ok: false,
-      stdout: "",
-      stderr: `${process.execPath} command timed out`,
-    });
+    const kill = spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const started = performance.now();
+      await expect(runCommand(process.execPath, ["-e", parent], 300)).resolves.toEqual({
+        ok: false,
+        stdout: "",
+        stderr: `${process.execPath} command timed out`,
+      });
+      expect(performance.now() - started).toBeLessThan(1200);
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
   });
 
   test("refresh finds the executable using the override, then PATH, then the home directory", async () => {
