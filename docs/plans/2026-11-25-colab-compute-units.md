@@ -53,9 +53,11 @@ Parsing, line by line, case-sensitive labels as observed:
 
 | Line | Rule |
 | --- | --- |
-| `Current balance: <number> compute units` | Required. A missing or non-numeric value is an error. |
-| `Usage rate: <number>/hr` | Optional. |
-| `Active assignments: <integer>` | Optional. |
+| `Current balance: <number> compute units` | Required. Accepts an optional sign. A missing or non-numeric value is an error. |
+| `Usage rate: <number>/hr` | Optional. Digits with an optional fractional part and no sign. |
+| `Active assignments: <integer>` | Optional. Integer digits without a sign. |
+
+All three fields accept comma thousands separators in groups of three digits.
 
 Errors are thrown from `refresh()` with a message the Providers page can show: executable not
 found (names `COLAB_CLI_PATH`), command failed (includes up to 200 characters from the first
@@ -73,7 +75,7 @@ nonblank stderr line), timeout, and unrecognised output. No zero or cached value
 | Label | Value | Condition |
 | --- | --- | --- |
 | `Balance` | `341.98 compute units` | Always |
-| `Usage Rate` | `0.00 units/hr`; with a rate greater than 0 the hours left as `balance / rate`, one decimal, are appended: `3.00 units/hr, 12.3 h left` | When the rate line is present |
+| `Usage Rate` | `0.00 units/hr`. The finite estimate `balance / rate` is appended to one decimal place when the balance is non-negative and the rate is positive. Example: `3.00 units/hr, 12.3 h left` | When the rate line is present |
 | `Active Sessions` | `0` | When the assignments line is present |
 
 No token or cost fields are set, so usage summaries are unchanged.

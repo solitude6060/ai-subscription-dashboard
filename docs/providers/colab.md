@@ -13,8 +13,10 @@ The WebUI displays the Google Colab compute-unit balance for the account signed 
 | Line | Value |
 | --- | --- |
 | Balance | Remaining compute units |
-| Usage Rate | Compute units consumed per hour, when reported. When the rate is positive, the hours left (balance divided by the rate, one decimal place) follow on the same line. |
+| Usage Rate | Compute units consumed per hour, when reported. Hours left appear on the same line when the balance is non-negative, the rate is positive, and dividing the balance by the rate gives a finite result. |
 | Active Sessions | Active assignments, when reported |
+
+The CLI output may use comma thousands separators, such as `1,234.56`. The usage rate and active assignment count must have no sign.
 
 The snapshot has no quota limit or reset time. It contributes no tokens or cost to usage totals.
 

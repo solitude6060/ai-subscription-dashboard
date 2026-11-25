@@ -140,6 +140,8 @@ bun run start:webui
 
 請用執行 WebUI 伺服器的作業系統帳號，在同一台主機安裝並登入 `google-colab-cli`。確認 `colab usage` 顯示餘額後，到 **Providers** 頁更新 **Google Colab**。若 `COLAB_CLI_PATH` 去除前後空白後有值，該路徑必須指向可執行檔。變數未設定或只有空白時，伺服器才會依序查找自身的 `PATH` 和 `$HOME/.local/bin/colab`。
 
+CLI 輸出的數字可以用逗號分隔千位。消耗速率及執行中的工作階段數不可帶正負號。當餘額大於或等於零、消耗速率大於零，且估算結果為有限數值時，儀表板會顯示預估剩餘時間。
+
 ## MiniMax 設定
 
 MiniMax refresh 沿用原本 OpenUsage 的 Token Plan remains API 方法。啟動 server 前設定其中一個環境變數：

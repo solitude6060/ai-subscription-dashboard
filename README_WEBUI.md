@@ -200,6 +200,8 @@ worker still has a 120-second limit; other requests keep the 120-second idle tim
 
 Install and sign in to `google-colab-cli` on the machine and OS account that runs the WebUI server. Verify that `colab usage` prints your balance, then refresh **Google Colab** on the **Providers** page. A non-blank `COLAB_CLI_PATH` must point to an executable. When it is unset or blank, the server checks its own `PATH`, then `$HOME/.local/bin/colab`. [Google Colab setup and troubleshooting](docs/providers/colab.md)
 
+The dashboard accepts comma thousands separators in CLI values. The usage rate and active assignment count must have no sign. Hours left appear for a non-negative balance, a positive rate, and a finite estimate.
+
 ## Grok Build Notes
 
 Grok Build uses the original `plugins/grok/plugin.js` adapter. Sign in with `grok login`. The plugin reads `~/.grok/auth.json` (expanded from the process `HOME`). `$GROK_HOME` is used for session transcripts, not for `auth.json`.

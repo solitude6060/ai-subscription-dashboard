@@ -44,21 +44,24 @@ export class ColabProvider implements UsageProvider {
     }
 
     const output = result.stdout.split(/\r?\n/).map((line) => line.trim());
-    const balance = usageValue(output, "Current balance", /^([+-]?\d+(?:\.\d+)?) compute units$/);
+    const balance = usageValue(output, "Current balance", /^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?) compute units$/);
     if (balance === undefined) {
       throw new Error("Unrecognised Google Colab usage output: missing Current balance.");
     }
-    const rate = usageValue(output, "Usage rate", /^([+-]?\d+(?:\.\d+)?)\/hr$/);
-    const assignments = usageValue(output, "Active assignments", /^([+-]?\d+)$/);
+    const rate = usageValue(output, "Usage rate", /^((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\/hr$/);
+    const assignments = usageValue(output, "Active assignments", /^((?:\d{1,3}(?:,\d{3})+|\d+))$/);
 
-    const lines = [{ type: "text", label: "Balance", value: `${balance} compute units` }];
+    const lines = [{ type: "text", label: "Balance", value: `${balance.text} compute units` }];
     if (rate !== undefined) {
       // At most three lines: the dashboard collapses a card with more, balance included.
-      const left = Number(rate) > 0 ? `, ${(Number(balance) / Number(rate)).toFixed(1)} h left` : "";
-      lines.push({ type: "text", label: "Usage Rate", value: `${rate} units/hr${left}` });
+      const hoursLeft = balance.amount / rate.amount;
+      const left = balance.amount >= 0 && rate.amount > 0 && Number.isFinite(hoursLeft)
+        ? `, ${hoursLeft.toFixed(1)} h left`
+        : "";
+      lines.push({ type: "text", label: "Usage Rate", value: `${rate.text} units/hr${left}` });
     }
     if (assignments !== undefined) {
-      lines.push({ type: "text", label: "Active Sessions", value: assignments });
+      lines.push({ type: "text", label: "Active Sessions", value: assignments.text });
     }
 
     return [{
@@ -81,14 +84,15 @@ export class ColabProvider implements UsageProvider {
   }
 }
 
-function usageValue(lines: string[], label: string, pattern: RegExp): string | undefined {
+function usageValue(lines: string[], label: string, pattern: RegExp) {
   const prefix = `${label}:`;
   const line = lines.find((candidate) => candidate.startsWith(prefix));
   if (line === undefined) return undefined;
 
-  const value = line.slice(prefix.length).trim().match(pattern)?.[1];
-  if (value === undefined || !Number.isFinite(Number(value))) {
+  const text = line.slice(prefix.length).trim().match(pattern)?.[1];
+  const amount = Number(text?.replaceAll(",", ""));
+  if (text === undefined || !Number.isFinite(amount)) {
     throw new Error(`Unrecognised Google Colab usage output: invalid ${label}.`);
   }
-  return value;
+  return { text, amount };
 }
