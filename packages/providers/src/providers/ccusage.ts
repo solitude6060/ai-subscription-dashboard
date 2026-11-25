@@ -133,12 +133,23 @@ export async function runCommand(
   command: string,
   args: string[],
   timeoutMs = COMMAND_TIMEOUT_MS,
-  { name = command, timeoutIncludesOutput = true } = {},
+  { name = command, timeoutIncludesOutput = true, env }: {
+    name?: string;
+    timeoutIncludesOutput?: boolean;
+    env?: NodeJS.ProcessEnv;
+  } = {},
 ): Promise<CcusageCommandResult> {
   let proc: ReturnType<typeof Bun.spawn>;
-  const commandLine = process.platform === "linux" ? ["setsid", command, ...args] : [command, ...args];
+  const commandLine = [command, ...args];
   try {
+    if (process.platform === "linux") {
+      // The process wrapper uses the server's PATH even when the CLI has its own.
+      const setsid = env === undefined ? "setsid" : Bun.which("setsid");
+      if (!setsid) throw new Error("setsid executable not found on the server PATH.");
+      commandLine.unshift(setsid);
+    }
     proc = Bun.spawn(commandLine, {
+      env,
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",

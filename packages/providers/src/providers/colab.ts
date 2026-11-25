@@ -2,14 +2,14 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { UsageRecord } from "../../../core/src/types";
 import type { UsageProvider } from "../types";
-import { runCommand, type CcusageCommandRunner } from "./ccusage";
+import { runCommand } from "./ccusage";
 
 const COMMAND_TIMEOUT_MS = 20_000;
 const SNAPSHOT_ID = createHash("sha256").update("colab|usage").digest("hex");
 
 export interface ColabProviderOptions {
   env?: NodeJS.ProcessEnv;
-  runner?: CcusageCommandRunner;
+  runner?: typeof runCommand;
   now?: () => number;
 }
 
@@ -17,7 +17,7 @@ export class ColabProvider implements UsageProvider {
   id = "colab" as const;
   name = "Google Colab";
   private readonly env: NodeJS.ProcessEnv;
-  private readonly runner: CcusageCommandRunner;
+  private readonly runner: typeof runCommand;
   private readonly now: () => number;
 
   constructor(options: ColabProviderOptions = {}) {
@@ -36,7 +36,7 @@ export class ColabProvider implements UsageProvider {
       throw new Error("Google Colab executable not found. Install google-colab-cli or set COLAB_CLI_PATH.");
     }
 
-    const result = await this.runner(executable, ["usage"], COMMAND_TIMEOUT_MS);
+    const result = await this.runner(executable, ["usage"], COMMAND_TIMEOUT_MS, { env: this.env });
     if (!result.ok) {
       const detail = result.stderr?.split(/\r?\n/, 1)[0]?.trim();
       throw new Error(detail ? `Google Colab command failed: ${detail}` : "Google Colab command failed.");

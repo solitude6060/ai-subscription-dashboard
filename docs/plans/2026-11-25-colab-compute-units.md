@@ -44,10 +44,9 @@ Executable lookup, in order: the `COLAB_CLI_PATH` environment variable when set;
 `PATH`; `$HOME/.local/bin/colab`. `detect()` returns whether one of these resolves to an
 existing executable. It runs no command.
 
-`refresh()` runs `<executable> usage` with stdin ignored and a 20 second timeout. The command
-runner is injected through the constructor. The spawn, timeout and kill logic of
-`runCcusageCommand` (`ccusage.ts`) is shared, not copied; its timeout message must name the
-command that ran.
+`refresh()` runs `<executable> usage` with the provider's environment, stdin ignored and a
+20 second timeout. The command runner is injected through the constructor. It shares the spawn,
+timeout and kill logic in `ccusage.ts`. Timeout messages name the command that ran.
 
 Parsing, line by line, case-sensitive labels as observed:
 
