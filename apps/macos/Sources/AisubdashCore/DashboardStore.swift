@@ -194,7 +194,6 @@ public final class DashboardStore {
         tailscaleOriginInput = origin
         preferences.tailscaleOriginInput = origin
         if !previousOrigin.isEmpty {
-            preferences.pinsByOrigin.removeValue(forKey: previousOrigin)
             if let previous = UsageEndpoint(tailscale: previousOrigin) {
                 lastGoodByEndpoint.removeValue(forKey: previous)
                 failedEndpoints.remove(previous)

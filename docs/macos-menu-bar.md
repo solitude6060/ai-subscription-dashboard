@@ -63,7 +63,8 @@ Select the pin next to a quota to show its value in the menu bar. Hiding that
 provider keeps the pin active. To remove it, select **Unpin** next to the quota or
 in **Settings**. If the pinned quota is missing, the usage panel also offers
 **Unpin** next to the warning. Your selected source, Tailscale address, and pin
-preference are saved across app restarts.
+preference are saved across app restarts. Each Tailscale address keeps its own
+pin, which returns when you switch back or re-enter the address after clearing it.
 
 ## Reorder Providers
 
