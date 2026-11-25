@@ -177,3 +177,21 @@ describe("CursorUsageCollector ranges", () => {
     expect(dailyFlags(collector.records("cursor"))).toEqual([["2026-11-17T00:00:00.000Z", false]]);
   });
 });
+
+describe("CursorUsageCollector bounded queries", () => {
+  test("fails a query with only an end bound that returns an event after it", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T01:00:00.000Z", 3), event("2026-11-18T01:00:00.000Z", 5)], 2),
+      JSON.stringify({ endDate: String(Date.parse("2026-11-17T23:59:59.999Z")), page: 1, pageSize: 1000 }));
+
+    expect(collector.records("cursor")).toEqual([]);
+  });
+
+  test("fails a bounded query that returns an event without a parseable time", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-17T01:00:00.000Z", 3), { ...event("2026-11-17T02:00:00.000Z", 5), timestamp: "garbage" }], 2),
+      request("2026-11-17T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+
+    expect(collector.records("cursor")).toEqual([]);
+  });
+});

@@ -2769,4 +2769,16 @@ describe("cursor usage event ranges", () => {
     expect(lineValue(result, "Last 7 Days")).toBeUndefined()
     expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
   })
+
+  it("shows the time-limit note when a request fails after the events deadline", async () => {
+    const { ctx } = setup(() => {
+      vi.setSystemTime(Date.now() + 16000)
+      throw new Error("request timed out")
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (time limit)")
+  })
 })
