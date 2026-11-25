@@ -80,8 +80,9 @@ WebUI server answers on `127.0.0.1:${OPENUSAGE_WEBUI_PORT:-6736}` and reports th
 absolute paths with symlinks resolved), the refresh runs through that server (`POST /api/providers/refresh`),
 so the server stays the only writer; if that server request fails (HTTP error or no results list), the
 command exits with an error. Per-provider failures are printed and, as with a local refresh, do not change
-the exit code. Without
-such a server the command refreshes and writes locally.
+the exit code. A server that does not answer the health
+probe within 2 s also ends the command with an error, since it may be busy writing. When no server listens,
+the command refreshes and writes locally.
 
 ## Production-Like Local Use
 
