@@ -2673,4 +2673,71 @@ describe("cursor usage event ranges", () => {
     expect(eventTimeouts).toEqual([15000, 7000])
     expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
   })
+
+  it("applies the first page total to later pages", async () => {
+    const { ctx, eventBodies } = setup((opts) => {
+      const body = JSON.parse(opts.bodyText)
+      return {
+        status: 200,
+        bodyText: JSON.stringify(body.page === 1
+          ? { totalUsageEventsCount: 1400, usageEventsDisplay: Array.from({ length: 1000 }, () => todayEvent) }
+          : { usageEventsDisplay: Array.from({ length: 500 }, () => todayEvent) }),
+      }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.page)).toEqual([1, 2])
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it.each([
+    ["an error object", JSON.stringify({ error: "boom" })],
+    ["a list", JSON.stringify([])],
+  ])("marks the sample incomplete when a range answers with %s", async (_name, bodyText) => {
+    const second = String(Date.parse("2026-11-18T00:00:00.000Z"))
+    const { ctx, eventBodies } = setup((opts) =>
+      JSON.parse(opts.bodyText).startDate === second
+        ? { status: 200, bodyText }
+        : usageEventsResponse(opts, [todayEvent]))
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies).toHaveLength(2)
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("marks the sample incomplete when a later page is an empty object", async () => {
+    const { ctx, eventBodies } = setup((opts) => {
+      const body = JSON.parse(opts.bodyText)
+      return {
+        status: 200,
+        bodyText: body.page === 1
+          ? JSON.stringify({ totalUsageEventsCount: 1500, usageEventsDisplay: Array.from({ length: 1000 }, () => todayEvent) })
+          : "{}",
+      }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(eventBodies.map((body) => body.page)).toEqual([1, 2])
+    expect(lineValue(result, "Events Note")).toBe("Partial sample (incomplete fetch)")
+  })
+
+  it("caps the events deadline at 25 s after the probe start", async () => {
+    const { ctx, eventTimeouts } = setup((opts) => usageEventsResponse(opts, [todayEvent]))
+    const answer = ctx.host.http.request.getMockImplementation()
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("GetCurrentPeriodUsage")) vi.setSystemTime(Date.now() + 20000)
+      return answer(opts)
+    })
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+
+    expect(eventTimeouts[0]).toBe(5000)
+  })
 })
