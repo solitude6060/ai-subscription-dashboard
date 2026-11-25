@@ -21,6 +21,23 @@ final class DashboardVisibilityTests: XCTestCase {
         XCTAssertFalse(store.hasVisibilityOverrides)
     }
 
+    func testAccountWithOnlyDetailsIsVisibleByDefaultAndNotCountedNearLimit() async {
+        let dashboard = UsageDashboard(accounts: [
+            UsageAccount(id: "manual", name: "Manual", quotas: []),
+            UsageAccount(
+                id: "colab", name: "Google Colab", quotas: [],
+                details: [UsageDetail(id: "0", label: "Balance", value: "341.98 compute units")]
+            ),
+        ])
+        let store = DashboardStore(preferences: InMemoryDashboardPreferences(), loadDashboard: { _ in dashboard })
+
+        await store.reload()
+
+        XCTAssertEqual(store.visibleAccounts.map(\.id), ["colab"])
+        XCTAssertEqual(store.hiddenAccountCount, 1)
+        XCTAssertEqual(store.nearLimitCount, 0)
+    }
+
     func testOverridesMatchExactAccountIDsAndPreserveServerOrder() async {
         let store = makeStore()
         await store.reload()

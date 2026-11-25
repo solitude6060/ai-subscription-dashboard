@@ -68,10 +68,24 @@ public struct UsageQuota: Hashable, Sendable, Identifiable {
     }
 }
 
+/// A snapshot text line: a value without a limit, such as a credit balance.
+public struct UsageDetail: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let label: String
+    public let value: String
+
+    public init(id: String, label: String, value: String) {
+        self.id = id
+        self.label = label
+        self.value = value
+    }
+}
+
 public struct UsageAccount: Hashable, Sendable, Identifiable {
     public let id: String
     public let name: String
     public let quotas: [UsageQuota]
+    public let details: [UsageDetail]
     public let observedAt: Date?
     public let refreshFailed: Bool
 
@@ -79,12 +93,14 @@ public struct UsageAccount: Hashable, Sendable, Identifiable {
         id: String,
         name: String,
         quotas: [UsageQuota],
+        details: [UsageDetail] = [],
         observedAt: Date? = nil,
         refreshFailed: Bool = false
     ) {
         self.id = id
         self.name = name
         self.quotas = quotas
+        self.details = details
         self.observedAt = observedAt
         self.refreshFailed = refreshFailed
     }

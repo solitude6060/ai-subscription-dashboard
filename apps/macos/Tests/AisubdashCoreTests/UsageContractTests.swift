@@ -302,6 +302,40 @@ final class UsageContractTests: XCTestCase {
         XCTAssertNil(dashboard.accounts[1].observedAt)
     }
 
+    func testDecodesTextLinesAsAccountDetails() throws {
+        let providers = Data("""
+        [{ "providerId": "colab", "name": "Google Colab", "enabled": true }]
+        """.utf8)
+        let snapshots = Data("""
+        [
+          {
+            "providerId": "colab",
+            "startedAt": "2026-11-25T02:30:00Z",
+            "raw": {
+              "lines": [
+                { "type": "text", "label": "Balance", "value": "341.98 compute units" },
+                { "type": "progress", "label": "5h", "used": 10, "limit": 100 },
+                { "type": "text", "label": "Usage Rate", "value": "0.00 units/hr" },
+                { "type": "text", "label": "", "value": "no label" },
+                { "type": "text", "label": "No value" },
+                { "type": "text", "label": "Numeric", "value": 3 },
+                { "type": "badge", "label": "Plan", "text": "Pro" }
+              ]
+            }
+          }
+        ]
+        """.utf8)
+
+        let account = try XCTUnwrap(
+            UsageContractDecoder.decode(providersData: providers, snapshotsData: snapshots).accounts.first
+        )
+
+        XCTAssertEqual(account.details.map(\.label), ["Balance", "Usage Rate"])
+        XCTAssertEqual(account.details.map(\.value), ["341.98 compute units", "0.00 units/hr"])
+        XCTAssertEqual(Set(account.details.map(\.id)).count, 2)
+        XCTAssertEqual(account.quotas.map(\.label), ["5h"])
+    }
+
     func testDecodesUsageAsEmittedByTheBunAPI() throws {
         let providers = Data("""
         [
