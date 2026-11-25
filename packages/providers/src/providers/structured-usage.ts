@@ -132,6 +132,7 @@ export class CursorUsageCollector {
       if (query.expectedCount !== null && query.expectedCount !== total) query.failed = true;
       query.expectedCount = total;
     }
+    if (query.expectedCount !== null && query.events.length > query.expectedCount) query.failed = true;
     query.complete = query.expectedCount !== null
       ? query.events.length >= query.expectedCount
       : body.usageEventsDisplay.length < query.pageSize;
