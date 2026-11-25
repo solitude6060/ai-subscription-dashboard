@@ -138,7 +138,7 @@ bun run start:webui
 
 ## Google Colab 設定
 
-請用執行 WebUI 伺服器的作業系統帳號，在同一台主機安裝並登入 `google-colab-cli`。確認 `colab usage` 顯示餘額後，到 **Providers** 頁更新 **Google Colab**。伺服器依序查找 `COLAB_CLI_PATH`、自身的 `PATH` 和 `$HOME/.local/bin/colab`。餘額若收合在卡片中，請按 **Show Details**。
+請用執行 WebUI 伺服器的作業系統帳號，在同一台主機安裝並登入 `google-colab-cli`。確認 `colab usage` 顯示餘額後，到 **Providers** 頁更新 **Google Colab**。伺服器依序查找 `COLAB_CLI_PATH`、自身的 `PATH` 和 `$HOME/.local/bin/colab`。
 
 ## MiniMax 設定
 

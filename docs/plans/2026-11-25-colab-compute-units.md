@@ -73,8 +73,7 @@ and unrecognised output. No zero or cached value is substituted.
 | Label | Value | Condition |
 | --- | --- | --- |
 | `Balance` | `341.98 compute units` | Always |
-| `Usage Rate` | `0.00 units/hr` | When the rate line is present |
-| `Time Left` | hours as `balance / rate`, one decimal, for example `12.3 h` | When the rate is greater than 0 |
+| `Usage Rate` | `0.00 units/hr`; with a rate greater than 0 the hours left as `balance / rate`, one decimal, are appended: `3.00 units/hr, 12.3 h left` | When the rate line is present |
 | `Active Sessions` | `0` | When the assignments line is present |
 
 No token or cost fields are set, so usage summaries are unchanged.
@@ -97,9 +96,9 @@ No token or cost fields are set, so usage summaries are unchanged.
 
 Written before the implementation, each failing on an assertion first:
 
-1. The observed output yields the `Balance`, `Usage Rate` and `Active Sessions` lines and no
-   `Time Left` line.
-2. A rate greater than 0 adds `Time Left`.
+1. The observed output yields the `Balance`, `Usage Rate` and `Active Sessions` lines without
+   hours left.
+2. A rate greater than 0 appends the hours left to `Usage Rate`.
 3. Output without the balance line throws; so does a non-numeric balance.
 4. A failed command and a timeout throw messages that name the cause.
 5. Executable lookup order, and `detect()` true and false.

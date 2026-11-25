@@ -52,11 +52,9 @@ export class ColabProvider implements UsageProvider {
 
     const lines = [{ type: "text", label: "Balance", value: `${balance} compute units` }];
     if (rate !== undefined) {
-      lines.push({ type: "text", label: "Usage Rate", value: `${rate} units/hr` });
-      if (Number(rate) > 0) {
-        const hours = Number(balance) / Number(rate);
-        lines.push({ type: "text", label: "Time Left", value: `${hours.toFixed(1)} h` });
-      }
+      // At most three lines: the dashboard collapses a card with more, balance included.
+      const left = Number(rate) > 0 ? `, ${(Number(balance) / Number(rate)).toFixed(1)} h left` : "";
+      lines.push({ type: "text", label: "Usage Rate", value: `${rate} units/hr${left}` });
     }
     if (assignments !== undefined) {
       lines.push({ type: "text", label: "Active Sessions", value: assignments });

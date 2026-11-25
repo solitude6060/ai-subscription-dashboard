@@ -198,7 +198,7 @@ worker still has a 120-second limit; other requests keep the 120-second idle tim
 
 ## Google Colab Notes
 
-Install and sign in to `google-colab-cli` on the machine and OS account that runs the WebUI server. Verify that `colab usage` prints your balance, then refresh **Google Colab** on the **Providers** page. The server checks `COLAB_CLI_PATH`, its own `PATH`, and `$HOME/.local/bin/colab` in that order. If the balance is under **Show Details**, expand the card. [Google Colab setup and troubleshooting](docs/providers/colab.md)
+Install and sign in to `google-colab-cli` on the machine and OS account that runs the WebUI server. Verify that `colab usage` prints your balance, then refresh **Google Colab** on the **Providers** page. The server checks `COLAB_CLI_PATH`, its own `PATH`, and `$HOME/.local/bin/colab` in that order. [Google Colab setup and troubleshooting](docs/providers/colab.md)
 
 ## Grok Build Notes
 

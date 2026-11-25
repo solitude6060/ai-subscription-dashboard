@@ -6,15 +6,14 @@ The WebUI displays the Google Colab compute-unit balance for the account signed 
 
 1. Install `google-colab-cli` with `uv tool install google-colab-cli` on the WebUI server. Use the OS account that runs the server and sign in with the CLI.
 2. Run `colab usage` with that account and check that it prints `Current balance`. The server uses the first executable it finds in `COLAB_CLI_PATH`, its own `PATH`, or `$HOME/.local/bin/colab`. Set `COLAB_CLI_PATH` in the server environment to specify an absolute path.
-3. On the **Providers** page, refresh **Google Colab**. If the dashboard card collapses the Colab lines, select **Show Details**.
+3. On the **Providers** page, refresh **Google Colab**.
 
 ## Dashboard Lines
 
 | Line | Value |
 | --- | --- |
 | Balance | Remaining compute units |
-| Usage Rate | Compute units consumed per hour, when reported |
-| Time Left | Balance divided by the current usage rate, in hours to one decimal place. Shown when the rate is positive. |
+| Usage Rate | Compute units consumed per hour, when reported. When the rate is positive, the hours left (balance divided by the rate, one decimal place) follow on the same line. |
 | Active Sessions | Active assignments, when reported |
 
 The snapshot has no quota limit or reset time. It contributes no tokens or cost to usage totals.
