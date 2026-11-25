@@ -20,6 +20,7 @@ http://127.0.0.1:6736
 - Antigravity via 原本 OpenUsage plugin adapter（可選 **Provider Accounts** 追蹤多個 CLI／IDE 家目錄，含 `~/.agy-homes/*` 與預設本機 CLI 家目錄 `~`）
 - Claude Code via 原本 OpenUsage plugin adapter（可選 **Provider Accounts** 追蹤多個 `CLAUDE_CONFIG_DIR`）
 - Codex CLI via 原本 OpenUsage plugin adapter（可選 **Provider Accounts** 追蹤多個 `CODEX_HOME`）
+- [Google Colab](docs/providers/colab.md) 透過 Colab CLI 讀取運算單位餘額、消耗速率、預估剩餘時間與執行中的工作階段數
 - Cursor via 原本 OpenUsage plugin adapter（可選 **Provider Accounts** 追蹤多個 Cursor 設定目錄）
 - Devin via 原本 OpenUsage plugin adapter
 - Factory / Droid via 原本 OpenUsage plugin adapter
@@ -134,6 +135,12 @@ bun run start:webui
 ```
 
 `OPENUSAGE_WEBUI_ALLOWED_HOSTS` 可填逗號分隔的主機名稱或 IP 位址；`127.0.0.1`、`localhost`、`[::1]` 會自動允許。若所在區域網路不可信，綁定 `0.0.0.0` 時仍應搭配主機防火牆，只允許 Tailscale 介面連入 `6736`。
+
+## Google Colab 設定
+
+請用執行 WebUI 伺服器的作業系統帳號，在同一台主機安裝並登入 `google-colab-cli`。確認 `colab usage` 顯示餘額後，到 **Providers** 頁更新 **Google Colab**。若 `COLAB_CLI_PATH` 去除前後空白後有值，該路徑必須指向可執行檔。變數未設定或只有空白時，伺服器才會依序查找自身的 `PATH` 和 `$HOME/.local/bin/colab`。
+
+CLI 輸出的數字可以用逗號分隔千位。消耗速率及執行中的工作階段數不可帶正負號。當餘額大於或等於零、消耗速率大於零，且估算結果為有限數值時，儀表板會顯示預估剩餘時間。
 
 ## MiniMax 設定
 

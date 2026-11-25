@@ -121,15 +121,35 @@ export class CcusageProvider implements UsageProvider {
   }
 }
 
-export async function runCcusageCommand(
+export function runCcusageCommand(
   command: string,
   args: string[],
   timeoutMs = COMMAND_TIMEOUT_MS,
 ): Promise<CcusageCommandResult> {
+  return runCommand(command, args, timeoutMs, { name: "ccusage", timeoutIncludesOutput: false });
+}
+
+export async function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs = COMMAND_TIMEOUT_MS,
+  { name = command, timeoutIncludesOutput = true, env }: {
+    name?: string;
+    timeoutIncludesOutput?: boolean;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+): Promise<CcusageCommandResult> {
   let proc: ReturnType<typeof Bun.spawn>;
-  const commandLine = process.platform === "linux" ? ["setsid", command, ...args] : [command, ...args];
+  const commandLine = [command, ...args];
   try {
+    if (process.platform === "linux") {
+      // The process wrapper uses the server's PATH even when the CLI has its own.
+      const setsid = env === undefined ? "setsid" : Bun.which("setsid");
+      if (!setsid) throw new Error("setsid executable not found on the server PATH.");
+      commandLine.unshift(setsid);
+    }
     proc = Bun.spawn(commandLine, {
+      env,
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
@@ -138,27 +158,38 @@ export async function runCcusageCommand(
     return {
       ok: false,
       stdout: "",
-      stderr: error instanceof Error ? error.message : "ccusage command failed to spawn",
+      stderr: error instanceof Error ? error.message : `${name} command failed to spawn`,
     };
   }
-  const stdoutPromise = new Response(proc.stdout).text();
-  const stderrPromise = new Response(proc.stderr).text();
+  // A child can keep the pipes open after the command exits.
+  const outputAbort = timeoutIncludesOutput ? new AbortController() : undefined;
+  const readOutput = (stream: ReadableStream<Uint8Array>) =>
+    new Response(
+      outputAbort
+        ? stream.pipeThrough(new TransformStream(), { signal: outputAbort.signal })
+        : stream,
+    ).text();
+  const output = [readOutput(proc.stdout), readOutput(proc.stderr)];
+  const completion = timeoutIncludesOutput
+    ? Promise.all([proc.exited, ...output]).then(([code]) => code)
+    : proc.exited;
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<"timeout">((resolve) => {
     timeout = setTimeout(() => resolve("timeout"), timeoutMs);
   });
-  const exited = await Promise.race([proc.exited, timedOut]);
-  if (timeout) {
-    clearTimeout(timeout);
-  }
+  const exited = await Promise.race([completion, timedOut]).finally(() => clearTimeout(timeout));
   if (exited === "timeout") {
-    await killProcessTree(proc.pid);
-    await proc.exited.catch(() => undefined);
-    await Promise.all([stdoutPromise.catch(() => ""), stderrPromise.catch(() => "")]);
-    return { ok: false, stdout: "", stderr: "ccusage command timed out" };
+    // Output alone can time out after the command's PID has been released.
+    if (!timeoutIncludesOutput || (proc.exitCode === null && proc.signalCode === null)) {
+      await killProcessTree(proc.pid);
+      await proc.exited.catch(() => undefined);
+    }
+    outputAbort?.abort();
+    await Promise.all(output.map((read) => read.catch(() => "")));
+    return { ok: false, stdout: "", stderr: `${name} command timed out` };
   }
 
-  const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise]);
+  const [stdout, stderr] = await Promise.all(output);
   return {
     ok: exited === 0,
     stdout,

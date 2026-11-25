@@ -12,6 +12,7 @@ A local-first WebUI dashboard for AI coding usage on Ubuntu/Linux.
 - Antigravity via the original OpenUsage plugin adapter — optional **Provider Accounts** for multiple CLI/IDE homes, including `~/.agy-homes/*` and the default local CLI home (`~`)
 - Claude Code via the original OpenUsage plugin adapter — optional **Provider Accounts** for multiple `CLAUDE_CONFIG_DIR` homes
 - Codex CLI via the original OpenUsage plugin adapter — session/weekly/review usage, plus **reset-credit expiry**: each banked reset credit's exact expiry date and a live countdown, color-coded by urgency (red = expires today, amber = within 3 days, grey = plenty of time); optional **Provider Accounts** for multiple `CODEX_HOME` homes
+- [Google Colab](docs/providers/colab.md) via the Colab CLI — compute-unit balance, usage rate, estimated time left, and active sessions
 - Cursor via the original OpenUsage plugin adapter — optional **Provider Accounts** for multiple Cursor config homes
 - Devin via the original OpenUsage plugin adapter
 - Factory / Droid via the original OpenUsage plugin adapter
@@ -195,6 +196,12 @@ account's current enabled setting.
 
 Refresh requests stay connected while waiting in the queue and running. Each plugin
 worker still has a 120-second limit; other requests keep the 120-second idle timeout.
+
+## Google Colab Notes
+
+Install and sign in to `google-colab-cli` on the machine and OS account that runs the WebUI server. Verify that `colab usage` prints your balance, then refresh **Google Colab** on the **Providers** page. A non-blank `COLAB_CLI_PATH` must point to an executable. When it is unset or blank, the server checks its own `PATH`, then `$HOME/.local/bin/colab`. [Google Colab setup and troubleshooting](docs/providers/colab.md)
+
+The dashboard accepts comma thousands separators in CLI values. The usage rate and active assignment count must have no sign. Hours left appear for a non-negative balance, a positive rate, and a finite estimate.
 
 ## Grok Build Notes
 

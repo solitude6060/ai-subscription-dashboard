@@ -6,6 +6,7 @@ export const PROVIDER_IDS = [
   "antigravity",
   "claude-code",
   "codex",
+  "colab",
   "cursor",
   "devin",
   "factory",

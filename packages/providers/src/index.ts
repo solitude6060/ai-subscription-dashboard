@@ -1,4 +1,5 @@
 export { CcusageProvider } from "./providers/ccusage";
+export { ColabProvider, type ColabProviderOptions } from "./providers/colab";
 export { ManualProvider, createManualUsageRecord, type ManualUsageInput } from "./providers/manual";
 export { MiniMaxProvider, type MiniMaxProviderOptions } from "./providers/minimax";
 export {

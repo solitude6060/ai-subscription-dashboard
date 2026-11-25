@@ -138,6 +138,7 @@ async function main() {
   const providerNames: Record<string, string> = {
     "claude-code": "Claude Code",
     codex: "Codex",
+    colab: "Google Colab",
     cursor: "Cursor",
     "github-copilot": "GitHub Copilot",
     minimax: "MiniMax",
