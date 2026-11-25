@@ -110,7 +110,7 @@ describe("token_hourly rows of a replaced day", () => {
     return rows;
   };
 
-  test("a replaced closed Cursor day loses the hours and models the batch no longer has", async () => {
+  test("a replaced complete Cursor day loses the hours and models the batch no longer has", async () => {
     const path = join(dataDir, "replace.sqlite");
     const storage = new SqliteStorage(path);
     await storage.init();
@@ -122,7 +122,7 @@ describe("token_hourly rows of a replaced day", () => {
       hourly({ id: "h-old-4", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T04:00:00.000Z", model: "helios-alpha", totalTokens: 4 }),
     ], { replaceScopes: true });
     await storage.upsertUsageRecords([
-      daily({ id: "d-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
+      daily({ id: "d-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9, completeDay: true }),
       hourly({ id: "h-new", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
     ], { replaceScopes: true });
     storage.close();
@@ -153,10 +153,10 @@ describe("token_hourly rows of a replaced day", () => {
   });
 
   test.each([
-    ["9 minutes", 9, 2],
-    ["10 minutes", 10, 1],
-  ] as const)("replaces a Cursor day's hourly rows only once the day has been over for 10 minutes (%s)", async (_name, minutes, rows) => {
-    const path = join(dataDir, `grace-${minutes}.sqlite`);
+    ["without completeDay keeps", undefined, 2],
+    ["with completeDay replaces", true, 1],
+  ] as const)("a Cursor daily row %s the day's hourly rows, however late it is written", async (_name, completeDay, rows) => {
+    const path = join(dataDir, `flag-${String(completeDay)}.sqlite`);
     const storage = new SqliteStorage(path);
     await storage.init();
     const day = "2026-11-24T00:00:00.000Z";
@@ -164,11 +164,11 @@ describe("token_hourly rows of a replaced day", () => {
     await storage.upsertUsageRecords([
       hourly({ id: "h-old", providerId: "cursor", tool, source: "api", startedAt: "2026-11-24T23:00:00.000Z", model: "helios-alpha", totalTokens: 9 }),
     ]);
-    // A refresh that fetched the day before midnight can still be writing just after it.
-    setSystemTime(new Date(Date.parse("2026-11-25T00:00:00.000Z") + minutes * 60_000));
+    // A batch fetched before midnight (no completeDay) can be written long after it.
+    setSystemTime(new Date("2026-11-26T00:00:00.000Z"));
     try {
       await storage.upsertUsageRecords([
-        daily({ id: "d-24", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9 }),
+        daily({ id: "d-24", providerId: "cursor", tool, source: "api", startedAt: day, model: "Other", totalTokens: 9, ...(completeDay ? { completeDay } : {}) }),
         hourly({ id: "h-new", providerId: "cursor", tool, source: "api", startedAt: "2026-11-24T23:00:00.000Z", model: "Other", totalTokens: 9 }),
       ], { replaceScopes: true });
     } finally {
@@ -188,7 +188,7 @@ describe("token_hourly rows of a replaced day", () => {
       hourly({ id: "h-17", providerId: "cursor", tool, source: "api", startedAt: "2026-11-17T05:00:00.000Z", totalTokens: 5 }),
     ]);
     await storage.upsertUsageRecords([
-      daily({ id: "d-930", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T09:30:00.000Z", totalTokens: 7 }),
+      daily({ id: "d-930", providerId: "cursor", tool, source: "api", startedAt: "2026-11-16T09:30:00.000Z", totalTokens: 7, completeDay: true }),
     ], { replaceScopes: true });
     storage.close();
 
@@ -206,7 +206,7 @@ describe("token_hourly rows of a replaced day", () => {
       hourly({ id: "h-17", providerId: "cursor", tool, source, startedAt: "2026-11-17T00:00:00.000Z", totalTokens: 3 }),
     ]);
     await storage.upsertUsageRecords([
-      daily({ id: "d-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7 }),
+      daily({ id: "d-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7, completeDay: true }),
       hourly({ id: "h-16", providerId: "cursor", tool, source, startedAt: "2026-11-16T00:00:00.000Z", totalTokens: 7 }),
     ], { replaceScopes: true });
     storage.close();

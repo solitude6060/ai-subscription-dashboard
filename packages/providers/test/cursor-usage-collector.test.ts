@@ -108,3 +108,36 @@ describe("CursorUsageCollector per query", () => {
     ]);
   });
 });
+
+describe("CursorUsageCollector complete days", () => {
+  const dailyFlags = (records: UsageRecord[]) => records
+    .filter((record) => record.endedAt === undefined)
+    .map((record) => [record.startedAt, record.completeDay === true])
+    .sort((left, right) => String(left[0]).localeCompare(String(right[0])));
+
+  test("marks each daily row whose query covers its whole UTC day", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-16T05:00:00.000Z", 1), event("2026-11-17T23:59:00.000Z", 2)], 2),
+      request("2026-11-16T00:00:00.000Z", "2026-11-17T23:59:59.999Z"));
+
+    expect(dailyFlags(collector.records("cursor"))).toEqual([
+      ["2026-11-16T00:00:00.000Z", true],
+      ["2026-11-17T00:00:00.000Z", true],
+    ]);
+  });
+
+  test("does not mark a day the query ends inside, such as today", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-25T08:00:00.000Z", 1)], 1),
+      request("2026-11-25T00:00:00.000Z", "2026-11-25T12:00:00.000Z"));
+
+    expect(dailyFlags(collector.records("cursor"))).toEqual([["2026-11-25T00:00:00.000Z", false]]);
+  });
+
+  test("does not mark days of a query without an explicit range", () => {
+    const collector = new CursorUsageCollector();
+    collector.capture(200, page([event("2026-11-16T05:00:00.000Z", 1)], 1), "{}");
+
+    expect(dailyFlags(collector.records("cursor"))).toEqual([["2026-11-16T00:00:00.000Z", false]]);
+  });
+});
