@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createRequestHandler } from "../../../apps/server/src/index";
 import { isProviderRefreshable, providerCards } from "../../../apps/web/src/provider-ui";
 import type { UsageRecord } from "../../core/src/types";
@@ -20,6 +20,32 @@ const zeroRateLine = { type: "text", label: "Usage Rate", value: "0.00 units/hr"
 const noSessionsLine = { type: "text", label: "Active Sessions", value: "0" };
 const snapshotId = createHash("sha256").update("colab|usage").digest("hex");
 const now = Date.parse("2026-11-25T10:00:00.000Z");
+const runnerDeadlineMs = 5_000;
+const fixtureSleep = "await Bun.sleep(30_000)";
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    return false;
+  }
+}
+
+async function stopFixture(pidPath: string): Promise<void> {
+  const file = Bun.file(pidPath);
+  if (!(await file.exists())) return;
+  const pid = Number(await file.text());
+  if (!isRunning(pid)) return;
+
+  process.kill(pid, "SIGKILL");
+  const stopBy = performance.now() + runnerDeadlineMs;
+  while (isRunning(pid)) {
+    expect(performance.now()).toBeLessThan(stopBy);
+    await Bun.sleep(25);
+  }
+}
 
 function makeProvider(
   result: Awaited<ReturnType<CcusageCommandRunner>> = { ok: true, stdout: observedUsage },
@@ -103,31 +129,53 @@ describe("ColabProvider", () => {
   });
 
   test("the shared runner times out when the command exits before its output closes", async () => {
+    const dir = mkdtempSync(join(import.meta.dir, ".colab-runner-"));
+    const pidPath = join(dir, "child.pid");
     const parent = `
-      const command = [process.execPath, "-e", "await Bun.sleep(2000)"];
+      const command = [process.execPath, "-e", ${JSON.stringify(fixtureSleep)}];
       if (process.platform === "linux") command.unshift("setsid");
       const child = Bun.spawn(command, {
         stdout: "inherit",
         stderr: "inherit",
       });
+      await Bun.write(${JSON.stringify(pidPath)}, String(child.pid));
       child.unref();
       process.exit(0);
     `;
 
-    const kill = spyOn(process, "kill").mockImplementation(() => true);
     try {
-      const started = performance.now();
-      await expect(runCommand(process.execPath, ["-e", parent], 300)).resolves.toEqual({
+      await expect(runCommand(process.execPath, ["-e", parent], runnerDeadlineMs)).resolves.toEqual({
         ok: false,
         stdout: "",
         stderr: `${process.execPath} command timed out`,
       });
-      expect(performance.now() - started).toBeLessThan(1200);
-      expect(kill).not.toHaveBeenCalled();
+      expect(isRunning(Number(await Bun.file(pidPath).text()))).toBe(false);
     } finally {
-      kill.mockRestore();
+      await stopFixture(pidPath);
+      rmSync(dir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
+
+  test("the shared runner stops a command still running at the deadline", async () => {
+    const dir = mkdtempSync(join(import.meta.dir, ".colab-runner-"));
+    const pidPath = join(dir, "command.pid");
+    const command = `
+      await Bun.write(${JSON.stringify(pidPath)}, String(process.pid));
+      ${fixtureSleep};
+    `;
+
+    try {
+      await expect(runCommand(process.execPath, ["-e", command], runnerDeadlineMs)).resolves.toEqual({
+        ok: false,
+        stdout: "",
+        stderr: `${process.execPath} command timed out`,
+      });
+      expect(isRunning(Number(await Bun.file(pidPath).text()))).toBe(false);
+    } finally {
+      await stopFixture(pidPath);
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   test("refresh finds the executable using the override, then PATH, then the home directory", async () => {
     const dir = mkdtempSync(join(import.meta.dir, ".colab-executables-"));
