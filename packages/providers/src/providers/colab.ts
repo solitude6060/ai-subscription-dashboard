@@ -38,7 +38,8 @@ export class ColabProvider implements UsageProvider {
 
     const result = await this.runner(executable, ["usage"], COMMAND_TIMEOUT_MS, { env: this.env });
     if (!result.ok) {
-      const detail = result.stderr?.split(/\r?\n/, 1)[0]?.trim();
+      const firstLine = result.stderr?.split(/\r\n?|\n/).find((line) => line.trim())?.trim();
+      const detail = firstLine?.match(/^.{1,200}/su)?.[0];
       throw new Error(detail ? `Google Colab command failed: ${detail}` : "Google Colab command failed.");
     }
 

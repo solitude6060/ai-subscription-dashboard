@@ -58,8 +58,8 @@ Parsing, line by line, case-sensitive labels as observed:
 | `Active assignments: <integer>` | Optional. |
 
 Errors are thrown from `refresh()` with a message the Providers page can show: executable not
-found (names `COLAB_CLI_PATH`), command failed (includes the first line of stderr), timeout,
-and unrecognised output. No zero or cached value is substituted.
+found (names `COLAB_CLI_PATH`), command failed (includes up to 200 characters from the first
+nonblank stderr line), timeout, and unrecognised output. No zero or cached value is substituted.
 
 `refresh()` returns one `UsageRecord`:
 
