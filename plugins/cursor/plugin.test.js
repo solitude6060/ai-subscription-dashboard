@@ -172,6 +172,103 @@ describe("cursor plugin", () => {
     expect(queriedDbs).toEqual([pinnedDb])
   })
 
+  describe("encrypted Cursor app token", () => {
+    const CLI_AUTH = "~/.config/cursor/auth.json"
+    const ENCRYPTED = "cursor-safe-storage:v1:AAAA+bbbb/cccc"
+
+    const encryptedSqlite = (ctx) => {
+      ctx.host.sqlite.query.mockImplementation((db, sql) => {
+        if (String(sql).includes("cursorAuth/accessToken") || String(sql).includes("cursorAuth/refreshToken")) {
+          return JSON.stringify([{ value: ENCRYPTED }])
+        }
+        return JSON.stringify([])
+      })
+    }
+
+    const seedCliAuth = (ctx, token) => {
+      ctx.host.fs.writeText(CLI_AUTH, JSON.stringify({ accessToken: token, refreshToken: token }))
+      ctx.host.fs.writeText.mockClear()
+    }
+
+    const okUsage = { status: 200, bodyText: JSON.stringify({ enabled: true, planUsage: { totalSpend: 1200, limit: 2400 } }) }
+    const requestUrls = (ctx) => ctx.host.http.request.mock.calls.map((call) => String(call[0].url))
+    const usageAuthHeaders = (ctx) => ctx.host.http.request.mock.calls
+      .filter((call) => String(call[0].url).includes("GetCurrentPeriodUsage"))
+      .map((call) => call[0].headers.Authorization)
+
+    it("skips the encrypted state.vscdb token and uses the Cursor CLI auth file", async () => {
+      const ctx = makeCtx()
+      const cliToken = makeJwt({ exp: 9999999999, sub: "google-oauth2|user_cli" })
+      encryptedSqlite(ctx)
+      seedCliAuth(ctx, cliToken)
+      ctx.host.http.request.mockReturnValue(okUsage)
+
+      const plugin = await loadPlugin()
+      const result = plugin.probe(ctx)
+
+      expect(result.lines.find((line) => line.label === "Total usage")).toBeTruthy()
+      expect(usageAuthHeaders(ctx)).toEqual(["Bearer " + cliToken])
+      expect(requestUrls(ctx).some((url) => url.includes("/oauth/token"))).toBe(false)
+      expect(ctx.host.sqlite.exec).not.toHaveBeenCalled()
+    })
+
+    it("does not refresh or write back an expired Cursor CLI token", async () => {
+      const ctx = makeCtx()
+      const expired = makeJwt({ exp: 1, sub: "google-oauth2|user_cli" })
+      encryptedSqlite(ctx)
+      seedCliAuth(ctx, expired)
+      ctx.host.http.request.mockReturnValue({ status: 401, bodyText: "{}" })
+
+      const plugin = await loadPlugin()
+      expect(() => plugin.probe(ctx)).toThrow("Token expired")
+      expect(usageAuthHeaders(ctx)).toEqual(["Bearer " + expired])
+      expect(requestUrls(ctx).some((url) => url.includes("/oauth/token"))).toBe(false)
+      expect(ctx.host.fs.writeText).not.toHaveBeenCalled()
+      expect(ctx.host.keychain.writeGenericPassword).not.toHaveBeenCalled()
+      expect(ctx.host.sqlite.exec).not.toHaveBeenCalled()
+    })
+
+    it("reports an encrypted app sign-in without any request when no CLI auth exists", async () => {
+      const ctx = makeCtx()
+      encryptedSqlite(ctx)
+
+      const plugin = await loadPlugin()
+      expect(() => plugin.probe(ctx)).toThrow("Cursor app sign-in is encrypted")
+      expect(ctx.host.http.request).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ["refresh-only", { refreshToken: "cli-refresh" }],
+      ["encrypted access token", { accessToken: ENCRYPTED, refreshToken: ENCRYPTED }],
+    ])("ignores a CLI auth file without a usable access token (%s)", async (_name, auth) => {
+      const ctx = makeCtx()
+      encryptedSqlite(ctx)
+      ctx.host.fs.writeText(CLI_AUTH, JSON.stringify(auth))
+
+      const plugin = await loadPlugin()
+      expect(() => plugin.probe(ctx)).toThrow("Cursor app sign-in is encrypted")
+      expect(ctx.host.http.request).not.toHaveBeenCalled()
+    })
+
+    it.each(["OPENUSAGE_CURSOR_CONFIG_DIR", "OPENUSAGE_CURSOR_STATE_DB"])(
+      "does not read the CLI auth file for a home pinned by %s",
+      async (pinVar) => {
+        const ctx = makeCtx()
+        ctx.host.env.get.mockImplementation((name) => (name === pinVar ? "/tmp/cursor-work" : null))
+        encryptedSqlite(ctx)
+        seedCliAuth(ctx, makeJwt({ exp: 9999999999, sub: "google-oauth2|user_cli" }))
+        const exists = vi.spyOn(ctx.host.fs, "exists")
+        const readText = vi.spyOn(ctx.host.fs, "readText")
+
+        const plugin = await loadPlugin()
+        expect(() => plugin.probe(ctx)).toThrow("Cursor app sign-in is encrypted")
+        expect(ctx.host.http.request).not.toHaveBeenCalled()
+        expect(exists).not.toHaveBeenCalledWith(CLI_AUTH)
+        expect(readText).not.toHaveBeenCalledWith(CLI_AUTH)
+      }
+    )
+  })
+
   it("refreshes keychain access token and persists to keychain source", async () => {
     const ctx = makeCtx()
     const expiredPayload = Buffer.from(JSON.stringify({ exp: 1 }), "utf8")
