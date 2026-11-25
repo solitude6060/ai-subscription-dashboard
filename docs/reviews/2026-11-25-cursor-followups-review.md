@@ -56,3 +56,22 @@ Repairs after round 2:
 f2fa3f4c test: PR #75 review round 2 (F2-1..F2-5, F2-8)
 bbd9571d docs: record PR #75 review round 2 and triage
 ```
+
+## Round 3 (remediation re-review)
+
+- Reviewed `6ef49f4c..ee0ff789` (review records excluded). Prompt `pr75-round3/prompt.md` (SHA-256 `680fd983…a426f03f77`).
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, no findings | `pr75-round3/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` | high | APPROVE, 2 LOW | `pr75-round3/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, `~/.codex-family` | high | REQUEST_CHANGES, 2 MEDIUM, 2 LOW | `pr75-round3/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 3 thread `01a2139c-edca-7a61-80c9-227eaeb1acd5`.
+
+| ID | Finding | Source | Severity | Disposition |
+|---|---|---|---|---|
+| F3-1 | With `busy_timeout`, a server write waiting on an external lock blocks the server's event loop; the CLI's 2 s health probe then times out and the CLI refreshes locally, a second writer again. | Lane 3 | MEDIUM | Fix: a health probe that times out (or answers with an error status) is an unknown server state; the CLI exits with an error and does not write. Only a refused connection (no server) refreshes locally. `busy_timeout` stays for the server's own writes. Test first. |
+| F3-2 | The plugin accepts a page with a non-object entry that the collector rejects, so the card shows an unqualified total. | Lane 3 | MEDIUM | Fix: a non-object entry is a self-contradicting answer in the plugin too. Test first. |
+| F3-3 | The write-lock test does not assert that the child took the lock or exited cleanly. | Lanes 2, 3 | LOW | Fix: assert the `locked` message and exit 0; kill the child in `finally`. |
+| F3-4 | The Events Note row and the plan omit the zero-event `incomplete fetch` note and the deadline exception for HTTP failures. | Lanes 2, 3 | LOW | Fix the docs and the plan. |
