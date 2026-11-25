@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { createRequestHandler } from "../../../apps/server/src/index";
+import { isProviderRefreshable, providerCards } from "../../../apps/web/src/provider-ui";
+import type { UsageRecord } from "../../core/src/types";
+import { SqliteStorage } from "../../storage/src/index";
+import * as providers from "../src/index";
 import type { CcusageCommandRunner } from "../src/providers/ccusage";
 import { ColabProvider } from "../src/providers/colab";
 
@@ -160,4 +165,77 @@ describe("ColabProvider", () => {
     expect(await provider.refresh()).toEqual(expected);
     expect(await provider.refresh()).toEqual(expected);
   });
+});
+
+test("the providers package exports ColabProvider", () => {
+  expect(Reflect.get(providers, "ColabProvider")).toBe(ColabProvider);
+});
+
+test("the registry returns a Google Colab provider using the supplied environment", async () => {
+  const provider = providers
+    .getProviders({ env: { COLAB_CLI_PATH: process.execPath } })
+    .find((item) => item.id === "colab");
+
+  expect(provider).toBeInstanceOf(ColabProvider);
+  expect(provider?.name).toBe("Google Colab");
+  await expect(provider?.detect()).resolves.toBe(true);
+});
+
+test("the WebUI lists Google Colab", () => {
+  expect(providerCards).toContainEqual({ providerId: "colab", name: "Google Colab" });
+});
+
+test("the WebUI can refresh Google Colab", () => {
+  expect(isProviderRefreshable("colab")).toBe(true);
+});
+
+test("server refresh replaces the Colab snapshot and latest-snapshots returns it", async () => {
+  const dataDir = mkdtempSync(join(import.meta.dir, ".colab-storage-"));
+  const previousDataDir = process.env.OPENUSAGE_WEBUI_DIR;
+  process.env.OPENUSAGE_WEBUI_DIR = dataDir;
+  const storage = new SqliteStorage();
+  try {
+    let stdout = observedUsage;
+    const provider = new ColabProvider({
+      env: { COLAB_CLI_PATH: process.execPath },
+      runner: async () => ({ ok: true, stdout }),
+    });
+    await storage.init();
+    const before = await storage.getUsageSummary();
+    const handle = createRequestHandler(storage, { host: "127.0.0.1", port: 6736 }, undefined, [provider]);
+
+    for (const balance of ["341.98", "340.98"]) {
+      stdout = observedUsage.replace("341.98", balance);
+      const refresh = await handle(new Request("http://127.0.0.1:6736/api/providers/colab/refresh", {
+        method: "POST",
+      }));
+      expect(refresh.status).toBe(200);
+      expect(await refresh.json()).toEqual({
+        ok: true,
+        results: [{ providerId: "colab", ok: true, records: 1 }],
+      });
+    }
+
+    const response = await handle(new Request("http://127.0.0.1:6736/api/usage/latest-snapshots"));
+    expect(response.status).toBe(200);
+    const records = await response.json() as UsageRecord[];
+    expect(records).toEqual([expect.objectContaining({
+      id: snapshotId,
+      providerId: "colab",
+      tool: "OpenUsage Plugin Snapshot",
+      source: "cli",
+      raw: {
+        lines: [{ ...balanceLine, value: "340.98 compute units" }, zeroRateLine, noSessionsLine],
+      },
+    })]);
+    expect(await storage.listUsageRecords({ providerId: "colab" })).toHaveLength(1);
+    const after = await storage.getUsageSummary();
+    expect(after.today).toMatchObject({ totalTokens: before.today.totalTokens, costUsd: before.today.costUsd });
+    expect(after.month).toMatchObject({ totalTokens: before.month.totalTokens, costUsd: before.month.costUsd });
+  } finally {
+    storage.close();
+    if (previousDataDir === undefined) delete process.env.OPENUSAGE_WEBUI_DIR;
+    else process.env.OPENUSAGE_WEBUI_DIR = previousDataDir;
+    rmSync(dataDir, { recursive: true, force: true });
+  }
 });
