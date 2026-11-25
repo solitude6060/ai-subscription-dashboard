@@ -75,6 +75,11 @@ http://127.0.0.1:6736
 ~/.openusage-webui/plugins/<provider>/keychain.json
 ```
 
+`bun run status` prints the stored usage in the terminal; `bun run status:refresh` refreshes first. When a
+WebUI server answers on `127.0.0.1:${OPENUSAGE_WEBUI_PORT:-6736}` with the same database, the refresh runs
+through that server (`POST /api/providers/refresh`), so the server stays the only writer; otherwise the
+command refreshes and writes locally.
+
 ## Production-Like Local Use
 
 ```bash

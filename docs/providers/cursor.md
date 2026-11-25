@@ -29,7 +29,7 @@
 | Billing Cycle | `get-filtered-usage-events` | detail | text | Soft-fail. Same aggregation for the current billing cycle when the cycle starts earlier than 7 days. |
 | Billing Cycle Cost / Tokens | `get-filtered-usage-events` | detail | barChart | Soft-fail. Daily cost and token charts for the billing cycle window when shown. |
 | Per-model rows | `usageEventsDisplay[].model` | detail | text | Top models by cost within each window (`$X.XX · N calls · tokens`). |
-| Events Note | `get-filtered-usage-events` | detail | text | Soft-fail. Shown when the sample is truncated by the page cap or stopped mid-fetch. |
+| Events Note | `get-filtered-usage-events` | detail | text | Soft-fail. `Partial sample (page cap)`, `Partial sample (incomplete fetch)`, or `Partial sample (time limit)` when the events deadline stopped the fetch (also shown when no event was fetched). |
 
 **Enterprise flow** remains request-based via the REST `/api/usage` endpoint -- unchanged.
 
@@ -182,7 +182,7 @@ OpenUsage fetches events from 00:00 UTC of the earlier of the 7-day window start
 
 Token rows are stored per UTC day and per UTC hour. Each refresh deletes and rewrites every daily row of the UTC days it returns. For a day whose query covered the whole UTC day (a closed day in a 7-day range), it also deletes and rewrites that day's hourly rows (`token_hourly`), so an hour or model that Cursor no longer reports for that day (for example a renamed model) is removed. Today's hourly rows (its query ends at the request time), and hourly rows of a day without a daily row in the refresh, are upserted by hour and model. Rows come only from complete queries, and only for days and hours that start at or after the query start. A query is complete when the totals it reports agree and the event count equals the first reported total (later pages may omit the total), or, when no page carries a total, when a page is shorter than the request `pageSize`. An empty range (`{}`) stores nothing.
 
-Cost prefers positive `chargedCents`, then positive `tokenUsage.totalCents` (API price; numeric or numeric strings). Tokens use `tokenUsage.totalTokens` when present. If a range fails (HTTP error, invalid body, changed total, more events than the total, deadline) or hits the page cap, window totals append `· partial` and an **Events Note** marks the sample as partial.
+Cost prefers positive `chargedCents`, then positive `tokenUsage.totalCents` (API price; numeric or numeric strings). Tokens use `tokenUsage.totalTokens` when present. If a range fails (HTTP error, invalid body, changed total, a short page before the total, more events than the total), hits the events deadline or hits the page cap, window totals append `· partial` and an **Events Note** names the reason. A query that returns an event outside its requested range stores no rows.
 
 ## Authentication
 
@@ -242,7 +242,7 @@ agent login
 
 ### Multi-account homes (WebUI)
 
-Settings → Provider Accounts can track more than one Cursor config. Detect lists each `~/.config/Cursor` or macOS Application Support config that has a `state.vscdb` file; it does not check that the file holds a readable sign-in. Each enabled account is probed with `OPENUSAGE_CURSOR_CONFIG_DIR` set to that config root (optional power-user override: `OPENUSAGE_CURSOR_STATE_DB` for a full `state.vscdb` path). When either env is set, the plugin uses that home only and skips the global keychain and CLI auth file fallbacks so accounts do not bleed together. A pinned home whose database is encrypted cannot be read.
+Settings → Provider Accounts can track more than one Cursor config. Detect lists each `~/.config/Cursor` or macOS Application Support config that has a `state.vscdb` file; it does not check that the file holds a readable sign-in. Each enabled account is probed with `OPENUSAGE_CURSOR_CONFIG_DIR` set to that config root (optional power-user override: `OPENUSAGE_CURSOR_STATE_DB` for a full `state.vscdb` path). When either env is set, the plugin uses that home only and skips the global keychain and CLI auth file fallbacks so accounts do not bleed together. A Settings-managed account always uses its config root: the server removes an ambient `OPENUSAGE_CURSOR_STATE_DB` from that account's environment (`packages/providers/src/account-detect.ts`). A pinned home whose database is encrypted cannot be read.
 
 ### Token Refresh
 
