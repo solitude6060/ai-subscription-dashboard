@@ -25,6 +25,8 @@
   const EVENTS_MAX_PAGES = 10
   const EVENTS_RANGE_DAYS = 7
   const EVENTS_DEADLINE_MS = 15000
+  // The desktop host stops the whole probe at 30 s; event requests end 25 s after the probe start.
+  const PROBE_EVENTS_END_MS = 25000
   const EVENTS_REQUEST_TIMEOUT_MS = 15000
   const MODEL_BREAKDOWN_LIMIT = 5
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
@@ -683,9 +685,10 @@
           break
         }
         var data = ctx.util.tryParseJson(resp.bodyText)
-        // The API answers a range without events with {} (no list, no total).
-        var empty = !!data && typeof data === "object" && data.usageEventsDisplay === undefined && !data.totalUsageEventsCount
-        if (!data || typeof data !== "object" || (!empty && !Array.isArray(data.usageEventsDisplay))) {
+        // The API answers a range without events with {} on the first page.
+        var plain = !!data && typeof data === "object" && !Array.isArray(data)
+        var empty = plain && page === 1 && Object.keys(data).length === 0
+        if (!plain || (!empty && !Array.isArray(data.usageEventsDisplay))) {
           ctx.host.log.warn("usage events: invalid response")
           incomplete = true
           break
@@ -700,17 +703,17 @@
         }
         if (total != null) expectedTotal = total
         for (var i = 0; i < batch.length; i++) all.push(batch[i])
-        if (total != null && all.length > total) {
+        if (expectedTotal != null && all.length > expectedTotal) {
           ctx.host.log.warn("usage events: more events than the total")
           incomplete = true
           break
         }
         if (batch.length < EVENTS_PAGE_SIZE) {
-          if (total != null && all.length < total) truncated = true
+          if (expectedTotal != null && all.length < expectedTotal) truncated = true
           break
         }
-        if (total != null && all.length >= total) break
-        if (page === EVENTS_MAX_PAGES && (total == null || all.length < total)) {
+        if (expectedTotal != null && all.length >= expectedTotal) break
+        if (page === EVENTS_MAX_PAGES && (expectedTotal == null || all.length < expectedTotal)) {
           truncated = true
         }
       } catch (e) {
@@ -735,7 +738,7 @@
       // because the host replaces stored token rows by whole UTC day; closed days page stably.
       // The deadline keeps the probe inside the desktop host's 30 s limit. The first failed,
       // capped or late range ends the fetch.
-      var deadline = Date.now() + EVENTS_DEADLINE_MS
+      var deadline = Math.min(Date.now() + EVENTS_DEADLINE_MS, probeStartedAt + PROBE_EVENTS_END_MS)
       var firstDay = Math.floor(fetchStart / DAY_MS) * DAY_MS
       var todayStart = Math.floor(endMs / DAY_MS) * DAY_MS
       var ranges = [[todayStart, endMs]]
@@ -878,7 +881,10 @@
     )
   }
 
+  var probeStartedAt = 0
+
   function probe(ctx) {
+    probeStartedAt = Date.now()
     const authState = loadAuthState(ctx)
     let accessToken = authState.accessToken
     const refreshTokenValue = authState.refreshToken
