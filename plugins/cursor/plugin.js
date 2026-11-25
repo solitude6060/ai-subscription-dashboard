@@ -683,12 +683,14 @@
           break
         }
         var data = ctx.util.tryParseJson(resp.bodyText)
-        if (!data || !Array.isArray(data.usageEventsDisplay)) {
+        // The API answers a range without events with {} (no list, no total).
+        var empty = !!data && typeof data === "object" && data.usageEventsDisplay === undefined && !data.totalUsageEventsCount
+        if (!data || typeof data !== "object" || (!empty && !Array.isArray(data.usageEventsDisplay))) {
           ctx.host.log.warn("usage events: invalid response")
           incomplete = true
           break
         }
-        var batch = data.usageEventsDisplay
+        var batch = empty ? [] : data.usageEventsDisplay
         var total = typeof data.totalUsageEventsCount === "number" ? data.totalUsageEventsCount : null
         // The host stores a range only with a stable total and an exact count; flag the same cases here.
         if (total != null && expectedTotal != null && total !== expectedTotal) {
