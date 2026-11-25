@@ -57,3 +57,23 @@ Lane 3 thread `01a21343-075f-7173-a2c6-00628283849b`.
 | H3-1 | A writer that pauses more than 10 minutes between a pre-midnight fetch and its write can still replace a full day's hourly rows. | Lane 3 | MEDIUM | Fixed at the root, as lane 3 proposed in round 2: the collector marks daily rows whose query covered the whole UTC day (`completeDay`), and storage replaces hourly rows only for those. The clock rule and the Cursor allowlist are removed. Tests first. |
 | H3-2 | Docs omit the previous day's grace period. | Lanes 2, 3 | LOW | Superseded: the docs now describe the coverage rule. |
 | H3-3 | The plan's baselines named a removed today test. | Lane 2 | LOW | Fixed: baselines rewritten for the current tests. |
+
+## Round 4 (third remediation re-review)
+
+- Reviewed `c8699263..f76d8744` (review records excluded). Prompt `pr74-round4/prompt.md` (SHA-256 `c14f1118…04ebb4caa`). The first lane 2 launch was stopped by the orchestrator after 8 s because another session's AGY process was running on the same account (single-process rule); archived as `lane2-agy.aborted-concurrent-agy.*` and relaunched when no AGY process remained.
+
+| Lane | Client and model | Effort | Verdict | Raw output |
+|---|---|---|---|---|
+| 1 | Grok Build `grok-4.7` | xhigh | APPROVE, 1 LOW | `pr74-round4/lane1-grok.jsonl`, `lane1-grok.final.md` |
+| 2 | AGY `gemini-4-neon-high` | high | APPROVE, 1 LOW | `pr74-round4/lane2-agy.jsonl`, `lane2-agy.final.md` |
+| 3 | Codex `gpt-6.2-sol`, `~/.codex-family` | high | REQUEST_CHANGES, 1 MEDIUM, 1 LOW | `pr74-round4/lane3-codex-family.jsonl`, `lane3-codex-family.final.md` |
+
+Lane 3 thread `01a2134e-6eac-79e0-9d51-475d6ceaa095`.
+
+| ID | Finding | Source | Severity | Disposition |
+|---|---|---|---|---|
+| H4-1 | A delayed pre-midnight refresh still overwrites a closed day's hourly rows that share an hour and model with the complete batch (the upsert), so a value can drop until the next complete refresh. | Lane 3 | MEDIUM | Deferred, out of scope: on `origin/main` every hourly row is upserted the same way and the daily rows of that day are replaced by the older batch as well; this PR does not change that path. The next refresh restores both. Follow-up: serialize the WebUI and `status:refresh` writers, or record per-day completeness. |
+| H4-2 | The storage comment and the plan say a batch fetched before midnight keeps hourly rows upsert-only; only its in-progress day does, its closed days still replace. | Lane 1 | LOW | Deferred to the follow-up (comment and plan wording; behavior matches the coverage rule). |
+| H4-3 | No collector test for a day fed by a covering and a partial query, or for a range with one bound. | Lanes 2, 3 | LOW | Deferred to the follow-up (tests only). |
+
+Gate: zero unresolved CRITICAL or HIGH; H4-1 deferred with the evidence above; lanes 1 and 2 APPROVE `f76d8744`.
