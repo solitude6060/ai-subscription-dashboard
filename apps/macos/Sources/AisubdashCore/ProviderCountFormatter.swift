@@ -5,10 +5,12 @@ public enum ProviderCountFormatter {
 
     /// Settings subtitle for a provider row.
     public static func status(quotas quotaCount: Int, details detailCount: Int, refreshFailed: Bool) -> String {
-        if quotaCount == 0 {
+        if quotaCount == 0 && detailCount == 0 {
             return refreshFailed ? "Refresh failed" : "No data"
         }
-        let reading = quotas(quotaCount)
+        let reading = quotaCount > 0
+            ? quotas(quotaCount)
+            : (detailCount == 1 ? "1 value" : "\(detailCount) values")
         return refreshFailed ? "\(reading) · Refresh failed" : reading
     }
 

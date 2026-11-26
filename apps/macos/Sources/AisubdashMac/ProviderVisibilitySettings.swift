@@ -32,7 +32,8 @@ struct ProviderVisibilitySettings: View {
     }
 
     private func providerList(_ accounts: [UsageAccount]) -> some View {
-        let ordered = accounts.filter { !$0.quotas.isEmpty } + accounts.filter { $0.quotas.isEmpty }
+        let isEmpty: (UsageAccount) -> Bool = { $0.quotas.isEmpty && $0.details.isEmpty }
+        let ordered = accounts.filter { !isEmpty($0) } + accounts.filter(isEmpty)
         return ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(ordered) { account in

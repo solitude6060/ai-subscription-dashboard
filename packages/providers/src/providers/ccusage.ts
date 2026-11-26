@@ -210,16 +210,24 @@ export async function listDescendantPids(
   psCommand = ["ps", "-eo", "pid=,ppid="],
   timeoutMs = 2_000,
 ): Promise<number[]> {
-  // On expiry the listing is empty; the caller still signals the group and the root.
-  const ps = Bun.spawn(psCommand, {
-    timeout: timeoutMs,
-    killSignal: "SIGKILL",
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const output = await new Response(ps.stdout).text().catch(() => "");
-  await ps.exited.catch(() => undefined);
+  // On expiry or failure the listing is empty; the caller still signals the group and the root.
+  let ps: ReturnType<typeof Bun.spawn<"ignore", "pipe", "ignore">>;
+  try {
+    ps = Bun.spawn(psCommand, {
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+  } catch {
+    return [];
+  }
+  // A listing that was stopped or failed can end inside a record, so only a complete one is
+  // parsed. The read is not awaited first: a process holding the pipe would outlast the deadline.
+  const read = new Response(ps.stdout).text().catch(() => "");
+  if ((await ps.exited.catch(() => null)) !== 0) return [];
+  const output = await read;
 
   const childrenByParent = new Map<number, number[]>();
   for (const line of output.split("\n")) {
