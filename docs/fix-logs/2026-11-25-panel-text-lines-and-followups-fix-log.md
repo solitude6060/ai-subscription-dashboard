@@ -30,6 +30,12 @@ C7, C8 and F8: no change; reasons in the plan.
 | P6 | Not reproduced; read from the assertion. | The expected time text comes from a process with the same environment. | `cli-status-snapshots.test.ts` | Test only |
 | P7 | Plan wording. | Plan corrected. | None. | Plan |
 
+## Round 3
+
+| ID | Reproduction | Repair | Test | Files |
+| --- | --- | --- | --- | --- |
+| P8 | Read from the code; the return value does not show a read that stays active. | The read goes through an abortable stream and is aborted when the listing is discarded. | No new test: the existing listing cases pass through the abort path (timeout, non-zero exit, held pipe). | `ccusage.ts` |
+
 ## Verification
 
 On macOS 27.2, 2026-11-27: `swift test` 63 tests, 0 failures; `bun run test:webui` 686 pass,

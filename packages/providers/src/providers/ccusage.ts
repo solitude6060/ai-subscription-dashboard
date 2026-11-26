@@ -227,7 +227,10 @@ export async function listDescendantPids(
   // parsed. The read is not awaited first: a process holding the pipe would outlast the deadline.
   // One deadline covers the exit and the read: a process that inherited the pipe can hold it
   // after the listing has exited.
-  const read = new Response(ps.stdout).text().catch(() => null);
+  const readAbort = new AbortController();
+  const read = new Response(
+    ps.stdout.pipeThrough(new TransformStream(), { signal: readAbort.signal }),
+  ).text().catch(() => null);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), timeoutMs);
@@ -236,7 +239,10 @@ export async function listDescendantPids(
     ps.exited.then((code) => (code === 0 ? read : null), () => null),
     expired,
   ]).finally(() => clearTimeout(timer));
-  if (output === null) return [];
+  if (output === null) {
+    readAbort.abort();
+    return [];
+  }
 
   const childrenByParent = new Map<number, number[]>();
   for (const line of output.split("\n")) {
