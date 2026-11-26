@@ -23,3 +23,20 @@ sandbox.
 | P3 | Grok, Neon | LOW | The `cli-status` time assertion fails under a locale that prints `02:00:00`; no case for a status whose only refresh failed. | Confirmed by reading; not reproduced. | Repair: accept an optional leading zero, assert the failure time is absent, add the only-failed case. |
 
 Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r1/`.
+
+## Round 2 — `main..1017bf2`
+
+| Lane | Verdict |
+| --- | --- |
+| 1 Grok | APPROVE, no findings |
+| 2 Neon | APPROVE, no findings |
+| 3 Sol | REQUEST_CHANGES, 2 MEDIUM, 2 LOW |
+
+| ID | Lanes | Severity | Finding | Verified | Decision |
+| --- | --- | --- | --- | --- | --- |
+| P4 | Sol | MEDIUM | After the listing process exits with code 0, the read of its output has no deadline; a process that inherited the pipe keeps cleanup waiting (`ccusage.ts:228`). | Confirmed by reading. `ps` starts no such process; a wrapper could. | Repair: one deadline over exit and read. |
+| P5 | Sol | MEDIUM | `listLatestUsageSnapshots()` excludes `raw.lines` rows whose tool is not `OpenUsage Plugin Snapshot`, and can pick a newer quota-only row for a provider; `cli-status` printed such rows before (`cli-status.ts:117`). | The query conditions are as described. No writer in `packages/providers/src` emits `raw.lines` under another tool name (lanes 1 and 2 report the same), and the one quota-only writer (MiniMax) emits no `raw.lines` rows. | No code change. `/api/usage/latest-snapshots` uses this query, so `cli-status` now selects the rows the dashboard and the macOS app show. A second selection rule for the CLI would let the two differ. |
+| P6 | Sol | LOW | The time assertion still assumes ASCII digits and colons. | Confirmed by reading. | Repair: the expected text is produced by a process with the same environment. |
+| P7 | Sol | LOW | The plan says Bun exposes no cgroup interface; Bun 1.4 has `Bun.spawn({ cgroup })` on Linux, which joins an existing cgroup. | Not checked against the Bun source; taken from the cited release notes. | Repair the plan wording. C7 stays unchanged: creating the cgroup needs host permissions that the service does not have by default. |
+
+Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r2/`.
