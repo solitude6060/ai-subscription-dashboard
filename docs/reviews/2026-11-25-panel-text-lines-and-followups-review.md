@@ -40,3 +40,18 @@ Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r1/`.
 | P7 | Sol | LOW | The plan says Bun exposes no cgroup interface; Bun 1.4 has `Bun.spawn({ cgroup })` on Linux, which joins an existing cgroup. | Not checked against the Bun source; taken from the cited release notes. | Repair the plan wording. C7 stays unchanged: creating the cgroup needs host permissions that the service does not have by default. |
 
 Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r2/`.
+
+## Round 3 — remediation re-review, `1017bf2..846c27d`
+
+| Lane | Verdict |
+| --- | --- |
+| 1 Grok | APPROVE, no findings |
+| 2 Neon | APPROVE, 1 LOW |
+| 3 Sol | REQUEST_CHANGES, 1 MEDIUM |
+
+| ID | Lanes | Severity | Finding | Verified | Decision |
+| --- | --- | --- | --- | --- | --- |
+| P8 | Sol, Neon | MEDIUM / LOW | When the listing is discarded, the read of its output stays active until the pipe closes (`ccusage.ts:230`). | Confirmed by reading. | Repair: abort the read, as `runCommand` does. |
+
+P5: lanes 1 and 2 confirmed the stated reason; lane 3 did not reopen it.
+Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r3/`.
