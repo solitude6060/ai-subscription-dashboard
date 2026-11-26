@@ -90,6 +90,8 @@ export function getConfigPath(): string {
   return join(getOpenUsageDir(), "config.json");
 }
 
+const DAY_MS = 86_400_000;
+
 export class SqliteStorage implements Storage {
   private db: Database | null = null;
 
@@ -107,6 +109,8 @@ export class SqliteStorage implements Storage {
     }
 
     this.db = new Database(this.databasePath, { create: true });
+    // The WebUI server and the CLI can open the same database; wait for the other's write lock.
+    this.db.exec("PRAGMA busy_timeout = 5000");
     await chmod(this.databasePath, 0o600).catch(() => undefined);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS usage_records (
@@ -288,6 +292,10 @@ export class SqliteStorage implements Storage {
       DELETE FROM usage_records
       WHERE provider_id = ? AND tool = ? AND started_at = ? AND source = ?
     `);
+    const deleteHourlyDay = db.prepare(`
+      DELETE FROM token_hourly
+      WHERE provider_id = ? AND tool = ? AND hour_start >= ? AND hour_start < ?
+    `);
     const deletePreviousPiOwners = db.prepare(`
       DELETE FROM usage_records
       WHERE (? IS NULL OR provider_id != ?) AND (provider_id = ? OR provider_id GLOB ?)
@@ -306,8 +314,9 @@ export class SqliteStorage implements Storage {
     const transaction = db.transaction((all: UsageRecord[]) => {
       // Hourly records feed only Allowance. They never enter usage_records or its replaceScopes delete.
       const items: UsageRecord[] = [];
+      const hours: UsageRecord[] = [];
       for (const record of all) {
-        if (isHourlyTokenRecord(record)) upsertHourly(record);
+        if (isHourlyTokenRecord(record)) hours.push(record);
         else items.push(record);
       }
       if (options.replaceScopes) {
@@ -349,8 +358,23 @@ export class SqliteStorage implements Storage {
           if (scopes.has(scope)) continue;
           scopes.add(scope);
           deleteScope.run(record.providerId, record.tool, record.startedAt, record.source);
+          // A daily row whose source covered the whole UTC day (completeDay, set by the Cursor collector)
+          // also replaces that day's hourly rows, so an hour or model the source no longer reports does
+          // not stay in Allowance. Other rows keep hourly rows upsert-only: the in-progress day, whose
+          // query ends at the request time (even when the write lands after midnight), Grok, ccusage
+          // and Pi. Closed days in the same batch still replace theirs.
+          const dayStart = Date.parse(record.startedAt);
+          if (record.completeDay === true && Number.isFinite(dayStart) && dayStart % DAY_MS === 0) {
+            deleteHourlyDay.run(
+              record.providerId,
+              record.tool,
+              new Date(dayStart).toISOString(),
+              new Date(dayStart + DAY_MS).toISOString(),
+            );
+          }
         }
       }
+      for (const record of hours) upsertHourly(record);
       for (const record of items) {
         insert.run(
           record.id,

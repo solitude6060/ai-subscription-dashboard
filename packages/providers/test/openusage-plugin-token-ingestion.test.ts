@@ -330,8 +330,8 @@ describe("OpenUsagePluginProvider token ingestion", () => {
 
     const records = await provider.refresh();
 
-    expect(tokenRecords(records).map((record) => [record.startedAt, record.totalTokens])).toEqual([
-      ["2026-08-09T00:00:00.000Z", 20],
+    expect(tokenRecords(records).map((record) => [record.startedAt, record.totalTokens, record.completeDay === true])).toEqual([
+      ["2026-08-09T00:00:00.000Z", 20, false],
     ]);
   });
 

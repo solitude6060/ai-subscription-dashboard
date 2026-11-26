@@ -637,3 +637,41 @@ describe("SqliteStorage", () => {
     storage.close();
   });
 });
+
+describe("SqliteStorage write lock", () => {
+  test("init waits for a write lock another process holds instead of failing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "openusage-busy-"));
+    const previous = process.env.OPENUSAGE_WEBUI_DIR;
+    process.env.OPENUSAGE_WEBUI_DIR = dir;
+    try {
+      const path = join(dir, "openusage.sqlite");
+      const first = new SqliteStorage(path);
+      await first.init();
+      first.close();
+      const holder = Bun.spawn(["bun", "-e", `
+        const { Database } = require("bun:sqlite");
+        const db = new Database(${JSON.stringify(path)});
+        db.exec("BEGIN IMMEDIATE");
+        console.log("locked");
+        Bun.sleepSync(800);
+        db.exec("COMMIT");
+      `], { stdout: "pipe" });
+      try {
+        const reader = holder.stdout.getReader();
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toContain("locked");
+        const second = new SqliteStorage(path);
+        await second.init();
+        second.close();
+        expect(await holder.exited).toBe(0);
+      } finally {
+        holder.kill();
+        await holder.exited;
+      }
+    } finally {
+      if (previous === undefined) delete process.env.OPENUSAGE_WEBUI_DIR;
+      else process.env.OPENUSAGE_WEBUI_DIR = previous;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 20_000);
+});

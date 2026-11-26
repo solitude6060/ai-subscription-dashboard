@@ -5,6 +5,8 @@ import {
 import { getProviders, OpenUsagePluginProvider } from "../../../packages/providers/src/index";
 import type { ProviderId, UsageRecord } from "../../../packages/core/src/types";
 import { attachCodexEventScan, saveCodexEventScan } from "./codex-event-refresh";
+import { realpathSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -64,6 +66,53 @@ function progressBar(used: number, limit: number): string {
   return `${bg}${" ".repeat(filled)}${BG_BAR}${" ".repeat(empty)}${RESET}`;
 }
 
+type ServerRefreshResult = { providerId: string; ok: boolean; records?: number; error?: string };
+
+// The WebUI server refreshes the same database through its own queue. A second writer can commit an
+// older batch after a newer one, so a running server on this database does the refresh instead.
+class ServerStateUnknown extends Error {}
+
+export function webuiPort(value: string | undefined): number {
+  const port = Number(value);
+  return value && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : 6736;
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync(resolve(path));
+  } catch {
+    return resolve(path);
+  }
+}
+
+async function refreshThroughServer(): Promise<ServerRefreshResult[] | null> {
+  const base = `http://127.0.0.1:${webuiPort(process.env.OPENUSAGE_WEBUI_PORT)}`;
+  try {
+    const health = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2000) }).catch((error: unknown) => {
+      // A server that does not answer in time may be blocked on a database write; writing locally would
+      // be a second writer. Without a matching WebUI server (refused connection, non-OK or unreadable
+      // health, another database) the CLI refreshes locally.
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new ServerStateUnknown(`WebUI server on ${base} did not answer /api/health within 2 s; not refreshing locally`);
+      }
+      throw error;
+    });
+    if (!health.ok) return null;
+    const info = (await health.json()) as { databasePath?: unknown };
+    // A relative path is relative to the server's working directory, which the CLI cannot know.
+    if (typeof info.databasePath !== "string" || !isAbsolute(info.databasePath)) return null;
+    if (canonicalPath(info.databasePath) !== canonicalPath(getDatabasePath())) return null;
+  } catch (error) {
+    if (error instanceof ServerStateUnknown) throw error;
+    return null;
+  }
+  const response = await fetch(`${base}/api/providers/refresh`, { method: "POST" });
+  if (!response.ok) throw new Error(`WebUI server refresh returned HTTP ${response.status}`);
+  const body = (await response.json()) as { results?: ServerRefreshResult[] };
+  if (!Array.isArray(body.results)) throw new Error("WebUI server refresh returned no results list");
+  return body.results;
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return Boolean(v) && typeof v === "object" && !Array.isArray(v);
 }
@@ -71,10 +120,19 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 async function main() {
   const doRefresh = process.argv.includes("--refresh") || process.argv.includes("-r");
 
+  // Ask the server first, so the CLI opens the database only after the server's refresh has finished.
+  const serverResults = doRefresh ? await refreshThroughServer() : null;
   const storage = new SqliteStorage();
   await storage.init();
 
-  if (doRefresh) {
+  if (serverResults) {
+    console.log(`${DIM}Refreshed through the WebUI server:${RESET}`);
+    for (const result of serverResults) {
+      const detail = result.ok ? `${result.records ?? 0} records` : (result.error ?? "failed");
+      console.log(`  ${result.ok ? GREEN : RED}${result.providerId}${RESET} ${DIM}${detail}${RESET}`);
+    }
+    console.log("");
+  } else if (doRefresh) {
     console.log(`${DIM}Refreshing providers...${RESET}`);
     const providers = getProviders();
     const statusMap = new Map(

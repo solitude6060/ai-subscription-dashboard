@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { createRequestHandler } from "../src/index";
 import { SqliteStorage } from "../../../packages/storage/src/index";
 import {
@@ -102,6 +102,18 @@ describe("WebUI API", () => {
       host: "127.0.0.1",
       port: 6736,
     });
+  });
+
+  test("reports an absolute database path for a relative data directory", async () => {
+    const previous = process.env.OPENUSAGE_WEBUI_DIR;
+    process.env.OPENUSAGE_WEBUI_DIR = "relative-data";
+    try {
+      const body = await (await handleRequest(new Request("http://127.0.0.1:6736/api/health"))).json();
+      expect(isAbsolute(body.databasePath)).toBe(true);
+      expect(body.databasePath).toBe(resolve("relative-data", "openusage.sqlite"));
+    } finally {
+      process.env.OPENUSAGE_WEBUI_DIR = previous;
+    }
   });
 
   test("rejects unexpected Host headers", async () => {

@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { join, normalize } from "node:path";
+import { join, normalize, resolve } from "node:path";
 import {
   isValidProviderId,
   type ProviderId,
@@ -100,7 +100,7 @@ export async function startServer(options: {
       event: "server_started",
       host,
       port,
-      databasePath: getDatabasePath(),
+      databasePath: resolve(getDatabasePath()),
     }),
   );
   return server;
@@ -180,7 +180,7 @@ async function handleApi(
       ok: true,
       version: VERSION,
       database: "ok",
-      databasePath: getDatabasePath(),
+      databasePath: resolve(getDatabasePath()),
       host: serverInfo.host,
       port: serverInfo.port,
     });
