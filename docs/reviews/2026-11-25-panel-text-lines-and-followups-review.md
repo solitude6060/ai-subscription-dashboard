@@ -55,3 +55,15 @@ Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r2/`.
 
 P5: lanes 1 and 2 confirmed the stated reason; lane 3 did not reopen it.
 Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r3/`.
+
+## Round 4 — remediation re-review, `846c27d..36f3e5d`
+
+| Lane | Verdict |
+| --- | --- |
+| 1 Grok | APPROVE, no findings |
+| 2 Neon | APPROVE, no findings |
+| 3 Sol | APPROVE, no findings |
+
+Lane 3's first attempt stopped at the Codex usage limit without a verdict; the rerun after the
+limit reset returned the verdict above. Reviewed code: `36f3e5d`. Later commits change records only.
+Transcripts: `openusage_webui-artifacts/reviews/followups-triple-r4/`.
