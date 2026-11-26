@@ -205,14 +205,44 @@ async function killProcessTree(rootPid: number): Promise<void> {
   killTargets(rootPid, targets, "SIGKILL");
 }
 
-async function listDescendantPids(rootPid: number): Promise<number[]> {
-  const ps = Bun.spawn(["ps", "-eo", "pid=,ppid="], {
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
+export async function listDescendantPids(
+  rootPid: number,
+  psCommand = ["ps", "-eo", "pid=,ppid="],
+  timeoutMs = 2_000,
+): Promise<number[]> {
+  // On expiry or failure the listing is empty; the caller still signals the group and the root.
+  let ps: ReturnType<typeof Bun.spawn<"ignore", "pipe", "ignore">>;
+  try {
+    ps = Bun.spawn(psCommand, {
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+  } catch {
+    return [];
+  }
+  // A listing that was stopped or failed can end inside a record, so only a complete one is
+  // parsed. The read is not awaited first: a process holding the pipe would outlast the deadline.
+  // One deadline covers the exit and the read: a process that inherited the pipe can hold it
+  // after the listing has exited.
+  const readAbort = new AbortController();
+  const read = new Response(
+    ps.stdout.pipeThrough(new TransformStream(), { signal: readAbort.signal }),
+  ).text().catch(() => null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
   });
-  const output = await new Response(ps.stdout).text().catch(() => "");
-  await ps.exited.catch(() => undefined);
+  const output = await Promise.race([
+    ps.exited.then((code) => (code === 0 ? read : null), () => null),
+    expired,
+  ]).finally(() => clearTimeout(timer));
+  if (output === null) {
+    readAbort.abort();
+    return [];
+  }
 
   const childrenByParent = new Map<number, number[]>();
   for (const line of output.split("\n")) {

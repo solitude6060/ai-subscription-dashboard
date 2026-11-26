@@ -33,7 +33,8 @@ function isRunning(pid: number): boolean {
   }
 }
 
-// A missing, empty or partly written pid file yields null: pid 0 would address this process group.
+// A missing or empty pid file yields null: pid 0 would address this process group.
+// A partly written file is prevented by the rename in publishPidSource, not here.
 async function readPid(pidPath: string): Promise<number | null> {
   const file = Bun.file(pidPath);
   if (!(await file.exists())) return null;

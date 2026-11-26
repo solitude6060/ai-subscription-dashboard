@@ -44,7 +44,7 @@ struct AccountCardView: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 6) {
             header
-            if account.quotas.isEmpty {
+            if account.quotas.isEmpty && account.details.isEmpty {
                 Text("No quota reported")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -53,6 +53,20 @@ struct AccountCardView: View {
                     QuotaRowView(quota: quota, now: now, isPinned: pinnedQuotaID == quota.id) {
                         onTogglePin(quota.id)
                     }
+                }
+                ForEach(account.details) { detail in
+                    HStack(spacing: 6) {
+                        Text(detail.label)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .layoutPriority(-1)
+                        Text(detail.value)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                    }
+                    .font(.callout)
+                    .accessibilityElement(children: .combine)
                 }
             }
         }

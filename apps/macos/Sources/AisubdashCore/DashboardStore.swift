@@ -280,7 +280,7 @@ public final class DashboardStore {
     }
 
     public func isAccountVisible(_ account: UsageAccount) -> Bool {
-        visibilityOverrides[account.id] ?? !account.quotas.isEmpty
+        visibilityOverrides[account.id] ?? !(account.quotas.isEmpty && account.details.isEmpty)
     }
 
     public func setAccountVisibility(_ isVisible: Bool, providerID: String) {

@@ -198,9 +198,14 @@ export function orderCardGroups(saved: string[], groups: ProviderCardGroup[]): s
   return [...ordered, ...missing];
 }
 
+/** Time of the reading a card shows; a failed refresh does not count as an update. */
+export function lastUpdatedAt(status: ProviderStatus | undefined): string | undefined {
+  return status?.lastSuccessAt ?? (status?.lastError ? undefined : status?.lastRefreshAt);
+}
+
 function latestRefresh(members: ProviderData[]): string | undefined {
   return members
-    .map((item) => item.status?.lastRefreshAt)
+    .map((item) => lastUpdatedAt(item.status))
     .filter((value): value is string => typeof value === "string")
     .sort()
     .at(-1);
@@ -277,6 +282,7 @@ function AccountGroupCard({ group }: { group: ProviderCardGroup }) {
 }
 
 function ProviderUsageCard({ providerId, plan, lines, status }: ProviderData) {
+  const updatedAt = lastUpdatedAt(status);
   const [expanded, setExpanded] = useState(false);
   const { summaryLines, detailLines } = useMemo(() => splitDashboardLines(lines), [lines]);
   const detailId = `${providerId}-details`;
@@ -319,9 +325,9 @@ function ProviderUsageCard({ providerId, plan, lines, status }: ProviderData) {
           </div>
         ) : null}
       </div>
-      {status?.lastRefreshAt ? (
+      {updatedAt ? (
         <div className="usage-card-footer">
-          Updated {formatDate(status.lastRefreshAt)}
+          Updated {formatDate(updatedAt)}
         </div>
       ) : null}
     </SortableCard>

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProviderStatus, UsageRecord } from "../../../packages/core/src/types";
 import {
   accountHeading,
+  lastUpdatedAt,
   dashboardRecordsForProviders,
   groupProviderCards,
   orderCardGroups,
@@ -311,5 +312,29 @@ describe("Dashboard account column order", () => {
     const groups = groupProviderCards([member("antigravity:acct2", []), member("antigravity:acct1", [])]);
 
     expect(groups[0].members.map((item) => item.providerId)).toEqual(["antigravity:acct1", "antigravity:acct2"]);
+  });
+});
+
+describe("lastUpdatedAt", () => {
+  const base = { providerId: "colab", name: "Google Colab", enabled: true, detected: true } as ProviderStatus;
+
+  test("uses the refresh time when the refresh succeeded", () => {
+    expect(lastUpdatedAt({ ...base, lastRefreshAt: "2026-11-25T02:00:00.000Z" })).toBe("2026-11-25T02:00:00.000Z");
+  });
+
+  test("keeps the last success after a failed refresh", () => {
+    expect(
+      lastUpdatedAt({
+        ...base,
+        lastRefreshAt: "2026-11-25T03:00:00.000Z",
+        lastSuccessAt: "2026-11-25T02:00:00.000Z",
+        lastError: "colab command timed out",
+      }),
+    ).toBe("2026-11-25T02:00:00.000Z");
+  });
+
+  test("is absent when the only refresh failed", () => {
+    expect(lastUpdatedAt({ ...base, lastRefreshAt: "2026-11-25T03:00:00.000Z", lastError: "failed" })).toBeUndefined();
+    expect(lastUpdatedAt(undefined)).toBeUndefined();
   });
 });

@@ -68,10 +68,24 @@ public struct UsageQuota: Hashable, Sendable, Identifiable {
     }
 }
 
+/// A snapshot text line: a value without a limit, such as a credit balance.
+public struct UsageDetail: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let label: String
+    public let value: String
+
+    public init(id: String, label: String, value: String) {
+        self.id = id
+        self.label = label
+        self.value = value
+    }
+}
+
 public struct UsageAccount: Hashable, Sendable, Identifiable {
     public let id: String
     public let name: String
     public let quotas: [UsageQuota]
+    public let details: [UsageDetail]
     public let observedAt: Date?
     public let refreshFailed: Bool
 
@@ -79,12 +93,14 @@ public struct UsageAccount: Hashable, Sendable, Identifiable {
         id: String,
         name: String,
         quotas: [UsageQuota],
+        details: [UsageDetail] = [],
         observedAt: Date? = nil,
         refreshFailed: Bool = false
     ) {
         self.id = id
         self.name = name
         self.quotas = quotas
+        self.details = details
         self.observedAt = observedAt
         self.refreshFailed = refreshFailed
     }
@@ -152,12 +168,16 @@ enum UsageContractDecoder {
                 ?? (refreshFailed ? nil : parseISO8601(obj["lastRefreshAt"]))
             let observedAt = snapshotTime.map { max($0, successTime ?? $0) }
             let quotas = snapshot.map { decodeQuotas(from: $0, providerId: providerId) } ?? []
+            // Accounts with quotas carry many secondary text lines; the compact panel shows
+            // text lines only for an account that has nothing else, three at most.
+            let details = quotas.isEmpty ? Array((snapshot.map(decodeDetails) ?? []).prefix(3)) : []
 
             accounts.append(
                 UsageAccount(
                     id: providerId,
                     name: name,
                     quotas: quotas,
+                    details: details,
                     observedAt: observedAt,
                     refreshFailed: refreshFailed
                 )
@@ -223,6 +243,20 @@ enum UsageContractDecoder {
             return [makeQuota(parsed, providerId: providerId, occurrences: &occurrences)]
         }
         return []
+    }
+
+    private static func decodeDetails(from snapshot: [String: JSONValue]) -> [UsageDetail] {
+        guard case .object(let raw) = snapshot["raw"], case .array(let lines) = raw["lines"] else { return [] }
+        return lines.enumerated().compactMap { index, line in
+            guard case .object(let obj) = line,
+                  nonEmptyString(obj["type"]) == "text",
+                  let label = nonEmptyString(obj["label"]),
+                  let value = nonEmptyString(obj["value"])
+            else {
+                return nil
+            }
+            return UsageDetail(id: "\(index):\(label)", label: label, value: value)
+        }
     }
 
     private struct ParsedQuota {
