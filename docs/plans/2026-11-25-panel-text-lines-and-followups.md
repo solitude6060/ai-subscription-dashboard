@@ -35,7 +35,7 @@ counting quotas.
 
 | ID | Finding | Decision |
 | --- | --- | --- |
-| C7 | Timeout cleanup signals process ids listed by `ps`; the system could have reused one (`ccusage.ts`, `killProcessTree`). | No change. The listing exists to stop descendants that left the process group (`29a7599`, tests in `ccusage-provider.test.ts`). A signal bound to process identity needs a pidfd or a cgroup, and Bun exposes neither. The interval between listing and the last signal is about 50 ms. |
+| C7 | Timeout cleanup signals process ids listed by `ps`; the system could have reused one (`ccusage.ts`, `killProcessTree`). | No change. The listing exists to stop descendants that left the process group (`29a7599`, tests in `ccusage-provider.test.ts`). A signal bound to process identity needs a pidfd, which Bun does not expose, or a cgroup: `Bun.spawn({ cgroup })` (Linux, Bun 1.4) joins an existing cgroup, and creating one needs host permissions the service does not have by default. The interval between listing and the last signal is about 50 ms. |
 | C8 | After the command exits, a descendant that holds the pipes is not stopped at the deadline. | No change. The command's process id is released at that point, so a signal to it or to its group has the identity problem of C7. The refresh itself returns at the deadline. |
 | C9 | The `ps` call during cleanup has no deadline. | Repair: 2 second deadline on the `ps` process. On expiry the listing is empty and the group and root signals still go out. |
 | C10 | After a failed refresh the dashboard card shows the failure time as "Updated". | Repair: the card footer and the group's latest time use `lastSuccessAt`; without it, `lastRefreshAt` only when the status has no error. |

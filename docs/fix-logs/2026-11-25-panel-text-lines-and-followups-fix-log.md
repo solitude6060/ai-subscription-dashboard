@@ -21,6 +21,15 @@ C7, C8 and F8: no change; reasons in the plan.
 | P2 | `status(quotas: 0, details: 1, ...)` returned "No data". | `ProviderCountFormatter.status` returns "1 value" or "N values"; Settings sorts accounts with details with the non-empty accounts. | `ProviderCountFormatterTests` | `ProviderCountFormatter.swift`, `ProviderVisibilitySettings.swift` |
 | P3 | Not reproduced; read from the assertion. | Optional leading zero, the failure time asserted absent, a case for a status whose only refresh failed. | `cli-status-snapshots.test.ts` | Test only |
 
+## Round 2
+
+| ID | Reproduction | Repair | Test | Files |
+| --- | --- | --- | --- | --- |
+| P4 | A listing command that printed a record, started a background `sleep 3` and exited with code 0 returned after 3 s with that record, against a 100 ms deadline. | One timer races the exit and the read; on expiry the listing is empty. | `ccusage-provider.test.ts`, "descendant listing discards ..." (held-pipe case) | `ccusage.ts` |
+| P5 | Not applicable. | No code change; reason in the review record. | None. | None. |
+| P6 | Not reproduced; read from the assertion. | The expected time text comes from a process with the same environment. | `cli-status-snapshots.test.ts` | Test only |
+| P7 | Plan wording. | Plan corrected. | None. | Plan |
+
 ## Verification
 
 On macOS 27.2, 2026-11-27: `swift test` 63 tests, 0 failures; `bun run test:webui` 686 pass,

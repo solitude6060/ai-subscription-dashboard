@@ -225,9 +225,18 @@ export async function listDescendantPids(
   }
   // A listing that was stopped or failed can end inside a record, so only a complete one is
   // parsed. The read is not awaited first: a process holding the pipe would outlast the deadline.
-  const read = new Response(ps.stdout).text().catch(() => "");
-  if ((await ps.exited.catch(() => null)) !== 0) return [];
-  const output = await read;
+  // One deadline covers the exit and the read: a process that inherited the pipe can hold it
+  // after the listing has exited.
+  const read = new Response(ps.stdout).text().catch(() => null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+  const output = await Promise.race([
+    ps.exited.then((code) => (code === 0 ? read : null), () => null),
+    expired,
+  ]).finally(() => clearTimeout(timer));
+  if (output === null) return [];
 
   const childrenByParent = new Map<number, number[]>();
   for (const line of output.split("\n")) {
