@@ -167,6 +167,12 @@ describe("CcusageProvider", () => {
     await expect(listDescendantPids(1, partial, 100)).resolves.toEqual([]);
     expect(Date.now() - started).toBeLessThan(1_500);
 
+    // A background process keeps the pipe open after the listing exits with code 0.
+    const held = ["sh", "-c", "echo '4242 1'; sleep 3 & exit 0"];
+    const heldStarted = Date.now();
+    await expect(listDescendantPids(1, held, 100)).resolves.toEqual([]);
+    expect(Date.now() - heldStarted).toBeLessThan(1_500);
+
     const failed = ["sh", "-c", "echo '4242 1'; exit 1"];
     await expect(listDescendantPids(1, failed)).resolves.toEqual([]);
 

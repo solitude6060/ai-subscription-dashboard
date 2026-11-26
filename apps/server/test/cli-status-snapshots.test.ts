@@ -37,6 +37,15 @@ function record(id: string, providerId: UsageRecord["providerId"], startedAt: st
   } as UsageRecord;
 }
 
+// The text cli-status prints for a time, from a process with the same locale and time zone.
+function localeTime(iso: string): string {
+  const proc = Bun.spawnSync(
+    [process.execPath, "-e", `console.log(new Date(${JSON.stringify(iso)}).toLocaleString())`],
+    { env: { ...process.env, TZ: "UTC" } },
+  );
+  return proc.stdout.toString().trim();
+}
+
 async function runStatus(): Promise<string> {
   const proc = Bun.spawn([process.execPath, join(import.meta.dir, "../src/cli-status.ts")], {
     env: { ...process.env, OPENUSAGE_WEBUI_DIR: dataDir, TZ: "UTC" },
@@ -83,9 +92,8 @@ test("dates the reading by the last success after a failed refresh", async () =>
 
   const out = await runStatus();
 
-  // A 24-hour locale prints 02:00:00.
-  expect(out).toMatch(/Updated .*\b0?2:00:00/);
-  expect(out).not.toContain("3:00:00");
+  expect(out).toContain(`Updated ${localeTime("2026-11-25T02:00:00.000Z")}`);
+  expect(out).not.toContain(localeTime("2026-11-25T03:00:00.000Z"));
 });
 
 test("prints no update time when the only refresh failed", async () => {
