@@ -160,6 +160,20 @@ describe("CcusageProvider", () => {
     expect(Date.now() - started).toBeLessThan(1_500);
   });
 
+  test("descendant listing discards the output of a listing that did not complete", async () => {
+    // The sleep keeps the pipe open after the shell is stopped.
+    const partial = ["sh", "-c", "echo '4242 1'; sleep 3"];
+    const started = Date.now();
+    await expect(listDescendantPids(1, partial, 100)).resolves.toEqual([]);
+    expect(Date.now() - started).toBeLessThan(1_500);
+
+    const failed = ["sh", "-c", "echo '4242 1'; exit 1"];
+    await expect(listDescendantPids(1, failed)).resolves.toEqual([]);
+
+    const complete = ["sh", "-c", "echo '4242 1'"];
+    await expect(listDescendantPids(1, complete)).resolves.toEqual([4242]);
+  });
+
   test("default command runner handles missing executables", async () => {
     await expect(runCcusageCommand("openusage-missing-ccusage-runner", [])).resolves.toEqual({
       ok: false,

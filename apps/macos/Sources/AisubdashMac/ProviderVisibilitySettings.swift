@@ -74,12 +74,9 @@ struct ProviderVisibilitySettings: View {
     }
 
     private func providerStatus(_ account: UsageAccount) -> String {
-        let quotaCount = account.quotas.count
-        if quotaCount == 0 {
-            return account.refreshFailed ? "Refresh failed" : "No data"
-        }
-        let quotas = ProviderCountFormatter.quotas(quotaCount)
-        return account.refreshFailed ? "\(quotas) · Refresh failed" : quotas
+        ProviderCountFormatter.status(
+            quotas: account.quotas.count, details: account.details.count, refreshFailed: account.refreshFailed
+        )
     }
 }
 #endif

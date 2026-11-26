@@ -83,5 +83,27 @@ test("dates the reading by the last success after a failed refresh", async () =>
 
   const out = await runStatus();
 
-  expect(out).toMatch(/Updated .*\b2:00:00/);
+  // A 24-hour locale prints 02:00:00.
+  expect(out).toMatch(/Updated .*\b0?2:00:00/);
+  expect(out).not.toContain("3:00:00");
+});
+
+test("prints no update time when the only refresh failed", async () => {
+  const storage = new SqliteStorage();
+  await storage.init();
+  await storage.upsertUsageRecords([
+    record("colab-snapshot", "colab", "2026-11-25T02:00:00.000Z", {
+      lines: [{ type: "text", label: "Balance", value: "341.98 compute units" }],
+    }),
+  ]);
+  await storage.upsertProviderStatus({
+    providerId: "colab", name: "Google Colab", enabled: true, detected: true,
+    lastRefreshAt: "2026-11-25T03:00:00.000Z", lastError: "failed",
+  });
+  storage.close();
+
+  const out = await runStatus();
+
+  expect(out).toContain("341.98 compute units");
+  expect(out).not.toContain("Updated");
 });
